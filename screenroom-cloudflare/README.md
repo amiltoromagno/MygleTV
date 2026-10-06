@@ -87,6 +87,78 @@ under Workers → your Worker → Settings → Domains & Routes:
 "routes": [{ "pattern": "screens.example.com", "custom_domain": true }]
 ```
 
+Note: Workers custom domains require the domain to be **on Cloudflare's
+nameservers**. Cloudflare lists "custom domains outside Cloudflare zones" as
+unsupported on Workers (it is supported on Pages). If the domain lives elsewhere,
+move its DNS to Cloudflare first, or put the frontend on Vercel and keep this
+Worker behind the scenes.
+
+## Deploying automatically on push
+
+Cloudflare's own Git integration is called **Workers Builds**. There is nothing
+to add to this repository — it is configured in the dashboard:
+
+1. Cloudflare dashboard → **Workers & Pages** → select the `screenroom` Worker
+2. **Settings** → **Builds** → **Connect**
+3. Authorise GitHub and choose `amiltoromagno/MygleTV`
+4. Set:
+
+   | Setting | Value |
+   | --- | --- |
+   | Git branch | `main` |
+   | **Root directory** | `/screenroom-cloudflare/` |
+   | Build command | `npm ci && npm test` |
+   | Deploy command | `npx wrangler deploy` (the default) |
+
+5. Save, then push a commit to trigger the first build.
+
+### Why those values
+
+**Root directory must be `/screenroom-cloudflare/`** — the directory holding
+`wrangler.jsonc`. This repository is a monorepo, so Workers Builds needs to be
+told which project to build.
+
+**The build command runs the tests.** This is the point of having one. Nothing
+deploys if the 22 protocol tests fail, so a broken commit cannot reach the live
+relay. Leave it empty if you would rather deploy unconditionally.
+
+**The Worker name must match.** Cloudflare requires the Worker name in the
+dashboard to equal `name` in `wrangler.jsonc` — both are `screenroom`. Renaming
+one without the other makes every build fail. This is also why the product
+rename to MygleTV left `wrangler.jsonc` alone.
+
+### The asset path is safe
+
+`assets.directory` is `../screenroom/public` — outside the root directory, which
+looks like it might break a CI checkout. It does not: wrangler resolves asset
+paths **relative to the config file**, not the working directory.
+
+Verified rather than assumed — a dry run from the repository root with
+`--config screenroom-cloudflare/wrangler.jsonc` succeeds, while pointing
+`assets.directory` at a non-existent path fails with a non-zero exit. Since
+Workers Builds checks out the whole repository, `../screenroom/public` resolves
+correctly.
+
+### Cost and branches
+
+Free plan: **3,000 build minutes/month, 1 concurrent build, 20 minute timeout**.
+Builds here take seconds. Pushes to branches other than `main` produce Preview
+URLs instead of touching production.
+
+Optionally set **Build watch paths** (for example `screenroom/**` and
+`screenroom-cloudflare/**`) so a documentation-only change does not redeploy.
+
+### The alternative: GitHub Actions
+
+`cloudflare/wrangler-action` in a workflow does the same job, with the config
+versioned in the repository instead of the dashboard, and the ability to run the
+*whole* test suite (including the browser checks) before deploying. It needs a
+`CLOUDFLARE_API_TOKEN` repository secret.
+
+There is no workflow file here on purpose: adding one that runs on every push
+would fail loudly on every commit until that secret exists. Workers Builds needs
+no secret handling at all, which is why it is the recommendation.
+
 ## Cost
 
 Durable Objects are on the Workers **free** plan (SQLite-backed, which is what

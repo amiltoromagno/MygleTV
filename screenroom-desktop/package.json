@@ -1,0 +1,26 @@
+{
+  "name": "screenroom-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop sharing client for Screen Room, with per-application audio capture.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "spike:linux": "node spike/linux-spike.mjs",
+    "check:monitor": "node test/monitor-capture-check.mjs",
+    "check:shell": "node test/shell-integration-check.mjs",
+    "start": "electron main.js",
+    "check:proxy": "node test/https-proxy-check.mjs",
+    "check:taploop": "node test/system-tap-repeat.mjs",
+    "spike:windows": "node spike/windows-spike.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "44.5.1"
+  }
+}

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>running</title>
+	</head>
+	<body>
+		<canvas id="c" width="640" height="360"></canvas>
+		<pre id="result">running…</pre>
+
+		<script type="module">
+			// Drives two real RTCPeerConnections through the app's own peer layer,
+			// wired together by an in-page signaling bus instead of the server. It
+			// verifies the parts the server test cannot: negotiation, the
+			// up-front transceivers, replaceTrack, and actual media arriving.
+			import { Peer } from "../public/peers.js";
+
+			const result = { ok: false, steps: [], error: null };
+			const el = document.getElementById("result");
+
+			function record(step) {
+				result.steps.push(step);
+				el.textContent = JSON.stringify(result, null, 2);
+			}
+
+			function snapshot() {
+				const of = (p) =>
+					p && p.pc
+						? {
+								conn: p.pc.connectionState,
+								ice: p.pc.iceConnectionState,
+								gather: p.pc.iceGatheringState,
+								sig: p.pc.signalingState,
+							}
+						: null;
+				return { sender: of(a), viewer: of(b) };
+			}
+
+			function done(ok, error) {
+				result.ok = ok;
+				if (error) result.error = String((error && error.message) || error);
+				result.pc = snapshot();
+				document.body.dataset.result = JSON.stringify(result);
+				document.title = ok ? "PASS" : "FAIL";
+				el.textContent = JSON.stringify(result, null, 2);
+			}
+
+			async function iceSummary() {
+				const out = {};
+				for (const [name, p] of [
+					["sender", a],
+					["viewer", b],
+				]) {
+					if (!p || !p.pc) continue;
+					try {
+						const report = await p.pc.getStats();
+						let local = 0;
+						let remote = 0;
+						const pairs = [];
+						report.forEach((r) => {
+							if (r.type === "local-candidate") local += 1;
+							if (r.type === "remote-candidate") remote += 1;
+							if (r.type === "candidate-pair") pairs.push(`${r.state}${r.nominated ? "*" : ""}`);
+						});
+						out[name] = { local, remote, pairs };
+					} catch {
+						out[name] = "stats failed";
+					}
+				}
+				return out;
+			}
+
+			const overall = setTimeout(async () => {
+				try {
+					result.ice = await iceSummary();
+				} catch {
+					/* diagnostics only */
+				}
+				done(false, new Error("overall timeout"));
+			}, 45000);
+			window.addEventListener("error", (e) => done(false, e.error || e.message));
+
+			// Draw continuously so the track carries real frames.
+			const canvas = document.getElementById("c");
+			const ctx = canvas.getContext("2d");
+			let frame = 0;
+			setInterval(() => {
+				frame += 1;
+				ctx.fillStyle = "#101822";
+				ctx.fillRect(0, 0, 640, 360);
+				ctx.fillStyle = "#4da3ff";
+				ctx.font = "48px sans-serif";
+				ctx.fillText("frame " + frame, 30, 190);
+			}, 80);
+
+			let a, b;
+			const state = { aConn: "new", bConn: "new", bTracks: 0, bytes: 0, started: false };
+
+			function check() {
+				if (!state.started && state.aConn === "connected" && state.bConn === "connected") {
+					state.started = true;
+					startSharing();
+				}
+			}
+
+			async function startSharing() {
+				record("both peer connections reached 'connected'");
+				const stream = canvas.captureStream(15);
+				const track = stream.getVideoTracks()[0];
+				record("sender track: " + track.kind + ", " + track.readyState);
+				await a.setScreen(track, null);
+				record("sender called setScreen (replaceTrack, no renegotiation)");
+				pollStats();
+			}
+
+			async function pollStats() {
+				try {
+					const stats = await b.pc.getStats();
+					stats.forEach((report) => {
+						if (report.type === "inbound-rtp" && report.kind === "video") {
+							state.bytes = Math.max(state.bytes, report.bytesReceived || 0);
+						}
+					});
+				} catch {
+					/* stats not ready */
+				}
+				if (state.bytes > 0) {
+					record("viewer received " + state.bytes + " bytes of video");
+					clearTimeout(overall);
+					done(true);
+				} else {
+					setTimeout(pollStats, 400);
+				}
+			}
+
+			a = new Peer({
+				id: "b",
+				polite: false,
+				send: (data) => b && b.accept(data),
+				onStream: () => {},
+				onStateChange: (id, s) => {
+					if (state.aConn !== s) record("sender connection: " + s);
+					state.aConn = s;
+					check();
+				},
+			});
+
+			b = new Peer({
+				id: "a",
+				polite: true,
+				send: (data) => a && a.accept(data),
+				onStream: (id, stream) => {
+					state.bTracks = stream.getVideoTracks().length;
+					record("viewer ontrack fired: " + state.bTracks + " video track(s)");
+				},
+				onStateChange: (id, s) => {
+					if (state.bConn !== s) record("viewer connection: " + s);
+					state.bConn = s;
+					check();
+				},
+			});
+
+			record("two peers constructed (impolite sender, polite viewer)");
+		</script>
+	</body>
+</html>

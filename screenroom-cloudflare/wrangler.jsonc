@@ -1,0 +1,25 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "screenroom",
+	"main": "src/worker.js",
+	"compatibility_date": "2025-11-01",
+
+	// The frontend is referenced in place rather than copied, so there is one
+	// copy of the app shared with the Node server and the desktop shell.
+	"assets": {
+		"directory": "../screenroom/public",
+		"binding": "ASSETS"
+	},
+
+	// One Durable Object per room. SQLite-backed, which is the only kind the
+	// Workers free plan allows.
+	"durable_objects": {
+		"bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+	},
+
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+
+	"observability": {
+		"enabled": true
+	}
+}

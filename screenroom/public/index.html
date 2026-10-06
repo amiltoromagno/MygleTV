@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="color-scheme" content="dark" />
+		<title>Screen Room</title>
+		<link
+			rel="icon"
+			href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151a22'/%3E%3Crect x='6.5' y='9.5' width='19' height='12' rx='2' stroke='%234da3ff' stroke-width='2' fill='none'/%3E%3Crect x='12' y='24' width='8' height='2.5' rx='1.25' fill='%234da3ff'/%3E%3C/svg%3E"
+		/>
+		<link rel="stylesheet" href="./styles.css" />
+	</head>
+	<body>
+		<!-- Name gate. Deliberately the only thing between the URL and the room. -->
+		<div class="gate" id="gate">
+			<form class="gate-card" id="gateForm">
+				<h1>Screen Room</h1>
+				<p class="gate-sub">Share your screen with the room.</p>
+
+				<label class="field">
+					<span>Your name</span>
+					<input
+						id="nameInput"
+						type="text"
+						maxlength="32"
+						autocomplete="nickname"
+						placeholder="Alex"
+						required
+					/>
+				</label>
+
+				<p class="gate-room">Room <strong id="gateRoom">main</strong></p>
+				<button class="btn btn-primary btn-wide" type="submit">Join room</button>
+				<p class="gate-note" id="gateNote" hidden></p>
+			</form>
+		</div>
+
+		<div id="app" hidden>
+			<header class="bar">
+				<div class="bar-left">
+					<span class="dot" id="statusDot" data-state="connecting"></span>
+					<strong class="brand">Screen Room</strong>
+					<span class="room-chip">#<span id="roomLabel"></span></span>
+				</div>
+				<div class="bar-right">
+					<span class="status-text" id="statusText">Connecting…</span>
+					<select class="select" id="audioSource" hidden title="What audio to share"></select>
+					<button class="btn" id="copyBtn" type="button">Copy invite link</button>
+					<button class="btn btn-primary" id="shareBtn" type="button">Share screen</button>
+				</div>
+			</header>
+
+			<main class="main">
+				<section class="stage-wrap">
+					<div class="stage" id="stage"></div>
+					<div class="empty" id="empty">
+						<p><strong>Nobody is sharing yet.</strong></p>
+						<p>Hit <em>Share screen</em> to put your screen up for everyone here.</p>
+					</div>
+				</section>
+
+				<aside class="roster">
+					<h2>In this room <span id="rosterCount"></span></h2>
+					<ul id="rosterList"></ul>
+					<p class="roster-hint">Anyone with the link can join.</p>
+				</aside>
+			</main>
+
+			<div class="toast" id="toast" hidden></div>
+		</div>
+
+		<script type="module" src="./app.js"></script>
+	</body>
+</html>

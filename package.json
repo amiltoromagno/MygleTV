@@ -1,0 +1,17 @@
+{
+	"name": "screenroom",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Private screen sharing with per-application audio",
+	"//": "Scripts only -- deliberately NOT an npm workspace. The three targets are genuinely different (browser+Node, Electron, Workers), and hoisting would make a Windows contributor install wrangler and a Linux contributor install Electron for no benefit.",
+	"scripts": {
+		"test": "npm run test:web && npm run test:desktop && npm run test:relay",
+		"test:web": "npm --prefix screenroom test",
+		"test:desktop": "npm --prefix screenroom-desktop test",
+		"test:relay": "npm --prefix screenroom-cloudflare test",
+		"install:all": "npm --prefix screenroom install && npm --prefix screenroom-desktop install && npm --prefix screenroom-cloudflare install",
+		"start:desktop": "npm --prefix screenroom-desktop start",
+		"start:web": "npm --prefix screenroom start",
+		"deploy:relay": "npm --prefix screenroom-cloudflare run deploy"
+	}
+}

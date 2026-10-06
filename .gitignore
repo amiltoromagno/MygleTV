@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Cloudflare
+.wrangler/
+.wrangler-home/
+dist/
+
+# Caches kept inside the workspace because HOME may be read-only
+.npm-cache/
+.electron-cache/
+.cache/
+
+# Local runtime output
+*.log
+screenroom-tone-*.wav
+screenroom-capture-*.wav
+
+# The VDO.Ninja reference checkout (~250 MB). Read for technique only; never
+# part of this project and never committed.
+vdo.ninja-develop/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Electron/Chromium debug output from manual runs
+.electron-log.txt

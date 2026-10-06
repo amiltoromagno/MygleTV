@@ -1,0 +1,21 @@
+{
+  "name": "screenroom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private, minimal screen sharing rooms over peer-to-peer WebRTC.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/signaling.test.mjs",
+    "test:browser": "node test/webrtc-check.mjs",
+    "test:e2e": "node test/app-e2e.mjs",
+    "test:all": "npm test && npm run test:browser && npm run test:e2e"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

@@ -25,7 +25,7 @@ import WebSocket from "ws";
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SCREENROOM_DIR = path.join(path.dirname(ROOT), "screenroom");
 
-const APP_PORT = 8491; // the ordinary Screen Room server
+const APP_PORT = 8491; // the ordinary MygleTV server
 const PROXY_PORT = 8492; // HTTPS in front of it
 const CDP_PORT = 9366;
 const ROOM = "proxycheck";
@@ -136,7 +136,7 @@ async function openPage(target) {
 let exitCode = 1;
 
 try {
-	// --- the ordinary Screen Room server ---------------------------------
+	// --- the ordinary MygleTV server ---------------------------------
 	const appServer = spawn(process.execPath, ["server.js"], {
 		cwd: SCREENROOM_DIR,
 		env: { ...process.env, PORT: String(APP_PORT), HOST: "127.0.0.1" },
@@ -157,7 +157,7 @@ try {
 		}
 		await sleep(100);
 	}
-	if (!healthy) throw new Error("the Screen Room server did not start");
+	if (!healthy) throw new Error("the MygleTV server did not start");
 
 	// --- a TLS proxy in front of it, like every real deployment ----------
 	const certDir = fs.mkdtempSync(path.join(os.tmpdir(), "sr-proxy-"));

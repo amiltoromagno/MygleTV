@@ -1,6 +1,6 @@
 # screenroom-desktop
 
-Desktop sharing client for [Screen Room](../screenroom). This is where
+Desktop sharing client for [MygleTV](../screenroom). This is where
 **per-application audio capture** lives, because no browser can do it:
 
 - **Firefox** supports audio only for a shared *tab*, and never system or
@@ -86,7 +86,7 @@ The frontend additions live in the shared web app so both builds use one copy:
 exists. In a browser nothing changes.
 
 `signaling.js` and `peers.js` are untouched. Signaling derives its WebSocket URL
-from `location.host`, which means the shell must load a Screen Room *origin* —
+from `location.host`, which means the shell must load a MygleTV *origin* —
 one that serves both the app and the `/ws` signaling endpoint. So the shell
 brings up its own server unless you point it elsewhere.
 
@@ -201,9 +201,9 @@ identification Windows uses does not map here; the picker must key off
 
 **`device.description` truncates at the first space.** PulseAudio parses
 `source_properties` by splitting on whitespace, so
-`device.description=ScreenRoom System` silently became just `ScreenRoom`. The
+`device.description=MygleTV-System` silently became just `MygleTV`. The
 system tap therefore carried the *same* label as the application mic, while the
-renderer was searching for `ScreenRoom System` and failing with "the ScreenRoom
+renderer was searching for `MygleTV-System` and failing with "the MygleTV
 System audio source did not appear". Escaping the space, quoting the value and
 quoting the whole property all truncate identically, so device labels must not
 contain whitespace at all -- a test enforces that now.
@@ -222,7 +222,7 @@ with `module N loaded but source "x" never appeared`, which points at the real
 cause.
 
 **A crash leaves stale plumbing that silently breaks the next share.** If the
-null-sink and remap-source survive an ungraceful exit, the old `ScreenRoom`
+null-sink and remap-source survive an ungraceful exit, the old `MygleTV`
 source still exists, wins the renderer's device lookup, and the app captures a
 dead sink's monitor - **sending silence with no error anywhere**. `cleanupStale()`
 sweeps them before every capture, and `listOurModules()` only touches modules

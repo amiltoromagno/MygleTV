@@ -492,12 +492,12 @@ function moduleRunner({ unloadCode = 0, listCode = 0 } = {}) {
 		const lines = [];
 		if (loaded.has("536870916")) {
 			lines.push(
-				"536870916\tmodule-null-sink\tsink_name=screenroom_capture sink_properties=device.description=ScreenRoom rate=48000 channels=2\t",
+				"536870916\tmodule-null-sink\tsink_name=screenroom_capture sink_properties=device.description=MygleTV rate=48000 channels=2\t",
 			);
 		}
 		if (loaded.has("536870917")) {
 			lines.push(
-				"536870917\tmodule-remap-source\tmaster=screenroom_capture.monitor source_name=screenroom_mic source_properties=device.description=ScreenRoom\t",
+				"536870917\tmodule-remap-source\tmaster=screenroom_capture.monitor source_name=screenroom_mic source_properties=device.description=MygleTV\t",
 			);
 		}
 		if (loaded.has("99")) {
@@ -620,3 +620,43 @@ test("listOurModules ignores lines it cannot parse", async () => {
 	const found = await router.listOurModules();
 	assert.deepEqual(found, [{ index: 6, name: "module-null-sink", args: "sink_name=screenroom_capture" }]);
 });
+
+// ---------------------------------------------------------------------------
+// Device labels
+// ---------------------------------------------------------------------------
+
+test("a device label containing whitespace is refused, not silently truncated", async () => {
+	// PipeWire parses source_properties by splitting on whitespace, so a label
+	// with a space loses everything after it. That is exactly how the system tap
+	// once ended up labelled identically to the application mic, while the
+	// renderer searched for the full string and reported a vague
+	// "audio source did not appear" from somewhere else entirely.
+	const router = new LinuxAudioRouter({ run: healthyRunner() });
+
+	await assert.rejects(
+		() => router.createVirtualMic("screenroom_capture", "screenroom_mic", "MygleTV TV"),
+		/whitespace/,
+		"the virtual mic label must be rejected before PipeWire truncates it",
+	);
+
+	await assert.rejects(
+		() => router.createSystemTap("screenroom_system", "MygleTV System"),
+		/whitespace/,
+		"the system tap label must be rejected too",
+	);
+});
+
+test("a hyphenated label is accepted", async () => {
+	// The guard must not be so eager that the real labels fail it.
+	const run = healthyRunner([
+		// createSystemTap confirms the source materialised before returning.
+		respond(has("list", "sources"), {
+			stdout: "1\tscreenroom_system\tPipeWire\ts16le 2ch 48000Hz\tSUSPENDED\n",
+		}),
+	]);
+	const router = new LinuxAudioRouter({ run });
+
+	const tap = await router.createSystemTap("screenroom_system", "MygleTV-System");
+	assert.equal(tap.name, "screenroom_system");
+});
+

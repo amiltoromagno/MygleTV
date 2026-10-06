@@ -1,4 +1,4 @@
-# Screen Room — project handoff
+# MygleTV — project handoff
 
 Everything a developer (or an agent) needs to understand this project and build
 the Windows client. Written to be read cold, on a machine that has never seen
@@ -63,7 +63,7 @@ screenroom-cloudflare/       the relay as a Worker + Durable Object
 
 **The frontend is shared, not copied.** `screenroom-cloudflare/wrangler.jsonc`
 points its asset directory at `../screenroom/public`, and the desktop client
-loads a Screen Room *origin*. One copy of the app; three ways to run it. This is
+loads a MygleTV *origin*. One copy of the app; three ways to run it. This is
 why the repository should stay together — see §9.
 
 ---
@@ -127,8 +127,8 @@ Nothing is moved, so it is non-destructive.
 - **Chromium hides `*.monitor` sources from `enumerateDevices()`.** Handing the
   renderer a monitor name is useless. Step 3 is load-bearing, not cosmetic.
 - **`device.description` truncates at the first space.** `source_properties` is
-  parsed by splitting on whitespace, so `device.description=ScreenRoom System`
-  silently became `ScreenRoom`. Device labels must not contain whitespace.
+  parsed by splitting on whitespace, so `device.description=MygleTV-System`
+  silently became `MygleTV`. Device labels must not contain whitespace.
   (Escaping and quoting all fail identically.)
 
 ---
@@ -417,7 +417,7 @@ first screen without asking will share the wrong thing, and nothing says so.
 Guessing is acceptable only when logged, and only when there is exactly one
 option.
 
-**Identical names on different systems are indistinguishable.** Two Screen Room
+**Identical names on different systems are indistinguishable.** Two MygleTV
 servers — one local, one remote — can both hold a room called `main`. Each user
 sees only themselves, which looks exactly like a broken app. The desktop window
 title now names the relay for this reason.

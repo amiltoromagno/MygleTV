@@ -1,4 +1,4 @@
-# Screen Room
+# MygleTV
 
 A private, deliberately small screen-sharing app for a handful of people. Open
 the link, type a name, and share your screen. Everyone else sees it in a grid,
@@ -104,7 +104,7 @@ cd /opt/screenroom && npm install --omit=dev
 
 ```ini
 [Unit]
-Description=Screen Room
+Description=MygleTV
 After=network.target
 
 [Service]

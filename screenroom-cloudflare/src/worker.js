@@ -1,4 +1,4 @@
-// Screen Room on Cloudflare Workers.
+// MygleTV on Cloudflare Workers.
 //
 // Two jobs only:
 //   /ws       -> the room's Durable Object (the signaling relay)

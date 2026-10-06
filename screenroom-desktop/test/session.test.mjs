@@ -113,7 +113,7 @@ test("start sets up the sink, virtual mic, loopback and route, in that order", a
 test("device labels contain no whitespace", async () => {
 	// `source_properties` is parsed by splitting on whitespace, so a label with a
 	// space is silently truncated to its first word. For the system tap that
-	// produced "ScreenRoom" -- identical to the application mic -- and the
+	// produced "MygleTV" -- identical to the application mic -- and the
 	// renderer's exact-match lookup then failed with a message that pointed
 	// nowhere near the cause. A space here is never a display preference.
 	for (const [name, label] of [
@@ -134,7 +134,7 @@ test("the two device labels are distinct", async () => {
 
 test("starting sweeps stale capture plumbing first", async () => {
 	// A crash leaves the old sink and source loaded. If they survive, the stale
-	// "ScreenRoom" source wins the renderer's device lookup on the next share and
+	// "MygleTV" source wins the renderer's device lookup on the next share and
 	// the app captures a dead sink -- silence, with nothing to explain it.
 	const router = fakeRouter();
 	const session = createCaptureSession({ router });

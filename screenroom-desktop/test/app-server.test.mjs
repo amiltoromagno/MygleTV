@@ -23,7 +23,7 @@ test("brings up the bundled server and serves the app", async () => {
 
 		const page = await fetch(server.url);
 		assert.equal(page.status, 200);
-		assert.match(await page.text(), /Screen Room/);
+		assert.match(await page.text(), /MygleTV/);
 
 		const health = await fetch(new URL("/healthz", server.url));
 		assert.equal(health.status, 200);
@@ -62,12 +62,12 @@ test("accepts a signaling websocket upgrade", async () => {
 	}
 });
 
-test("reuses an already-running Screen Room server on the same port", async () => {
+test("reuses an already-running MygleTV server on the same port", async () => {
 	const first = startAppServer({ port: PORT + 2, log: quiet });
 	try {
 		assert.equal(await first.ready({ attempts: 80 }), true);
 
-		// Something is already serving Screen Room here, so adopting it is right.
+		// Something is already serving MygleTV here, so adopting it is right.
 		const second = startAppServer({ port: PORT + 2, log: quiet });
 		try {
 			assert.equal(await second.ready({ attempts: 60 }), true);

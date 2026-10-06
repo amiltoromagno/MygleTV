@@ -33,6 +33,25 @@ export const DEFAULT_STALE_NAMES = [
 	"screenroom_system",
 ];
 
+/**
+ * Reject a device label containing whitespace.
+ *
+ * `source_properties` is parsed by splitting on whitespace, so a description
+ * with a space in it is silently truncated to its first word. That is how the
+ * system tap came to be labelled identically to the application mic while the
+ * renderer searched for the full string -- a failure that surfaced as a vague
+ * "audio source did not appear", a long way from its cause. Refuse it here
+ * rather than let it truncate in silence.
+ */
+function assertLabelIsSafe(label, what) {
+	if (/\s/.test(String(label))) {
+		throw new LinuxAudioError(
+			`${what} label ${JSON.stringify(label)} contains whitespace and would be ` +
+				`silently truncated by PipeWire; use a hyphen instead`,
+		);
+	}
+}
+
 /** A remap depends on its master sink, so it has to be unloaded first. */
 function rankModule(module) {
 	return module.name === "module-remap-source" ? 0 : 1;
@@ -322,7 +341,7 @@ export class LinuxAudioRouter {
 			"load-module",
 			"module-null-sink",
 			`sink_name=${name}`,
-			`sink_properties=device.description=ScreenRoom`,
+			`sink_properties=device.description=MygleTV`,
 			`rate=48000`,
 			`channels=2`,
 		]);
@@ -377,7 +396,8 @@ export class LinuxAudioRouter {
 	 * module-remap-source wraps the monitor in a source that does not look like
 	 * one, so getUserMedia can select it normally.
 	 */
-	async createVirtualMic(sinkName, sourceName, description = "ScreenRoom") {
+	async createVirtualMic(sinkName, sourceName, description = "MygleTV") {
+		assertLabelIsSafe(description, "virtual mic");
 		const res = await this.pactl([
 			"load-module",
 			"module-remap-source",
@@ -416,7 +436,8 @@ export class LinuxAudioRouter {
 	 * because the user carries on hearing everything exactly as before. It is a
 	 * tap, not a detour.
 	 */
-	async createSystemTap(sourceName = "screenroom_system", description = "ScreenRoom System") {
+	async createSystemTap(sourceName = "screenroom_system", description = "MygleTV-System") {
+		assertLabelIsSafe(description, "system tap");
 		if (!this.environment) await this.probe();
 
 		const res = await this.pactl([
@@ -439,7 +460,7 @@ export class LinuxAudioRouter {
 		this.systemTap = { id, name: sourceName };
 
 		// A tap that loads but never materialises is exactly the failure that
-		// surfaced as "the ScreenRoom System audio source did not appear" in the
+		// surfaced as "the MygleTV-System audio source did not appear" in the
 		// renderer, with nothing pointing at the real cause.
 		if (!(await this.waitForNode("sources", sourceName))) {
 			throw new LinuxAudioError(
@@ -513,7 +534,7 @@ export class LinuxAudioRouter {
 	 * Remove capture plumbing left behind by a previous run.
 	 *
 	 * A crash, a SIGKILL, or a laptop lid closing can leave the null-sink and
-	 * remap-source loaded. That is not merely untidy: the stale "ScreenRoom"
+	 * remap-source loaded. That is not merely untidy: the stale "MygleTV"
 	 * source then wins the renderer's device lookup on the next share, so the
 	 * app captures a dead sink's monitor and sends silence -- with no error
 	 * anywhere to explain it. Sweeping first makes capture robust to crashes.

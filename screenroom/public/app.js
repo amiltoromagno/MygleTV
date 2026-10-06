@@ -657,7 +657,7 @@ function enterRoom(name) {
 	$("gate").hidden = true;
 	$("app").hidden = false;
 	$("roomLabel").textContent = ROOM;
-	document.title = `#${ROOM} — Screen Room`;
+	document.title = `#${ROOM} — MygleTV`;
 
 	state.signaling = connectSignaling({ room: ROOM, name, handlers });
 

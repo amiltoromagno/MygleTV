@@ -130,14 +130,14 @@ const INJECT = `(() => {
 			window.__calls.startCapture.push(target);
 			// Flipped by the test to simulate audio setup failing.
 			if (window.__failAudio) {
-				return { ok: false, error: 'the "ScreenRoom-System" audio source did not appear' };
+				return { ok: false, error: 'the "MygleTV-System" audio source did not appear' };
 			}
 			const mode = target && target.mode === "system" ? "system" : "app";
 			return {
 				ok: true,
 				mode,
 				app: mode === "system" ? null : (target && target.app) || null,
-				deviceLabel: mode === "system" ? "ScreenRoom-System" : "ScreenRoom",
+				deviceLabel: mode === "system" ? "MygleTV-System" : "MygleTV",
 			};
 		},
 		stopCapture: async () => { window.__calls.stopCapture += 1; return { ok: true }; },
@@ -159,8 +159,8 @@ const INJECT = `(() => {
 	navigator.mediaDevices.enumerateDevices = async () => {
 		const devices = await realEnumerate();
 		return devices.concat([
-			{ kind: "audioinput", label: "ScreenRoom", deviceId: "fake-app-monitor", groupId: "fake-group" },
-			{ kind: "audioinput", label: "ScreenRoom-System", deviceId: "fake-system-tap", groupId: "fake-group" },
+			{ kind: "audioinput", label: "MygleTV", deviceId: "fake-app-monitor", groupId: "fake-group" },
+			{ kind: "audioinput", label: "MygleTV-System", deviceId: "fake-system-tap", groupId: "fake-group" },
 		]);
 	};
 

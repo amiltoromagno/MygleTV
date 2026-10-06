@@ -2,7 +2,7 @@
   "name": "screenroom-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Desktop sharing client for Screen Room, with per-application audio capture.",
+  "description": "Desktop sharing client for MygleTV, with per-application audio capture.",
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.mjs",

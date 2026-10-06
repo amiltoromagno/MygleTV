@@ -1,4 +1,4 @@
-// Screen Room desktop shell -- composition root.
+// MygleTV desktop shell -- composition root.
 //
 // The frontend is the same web app Firefox viewers load; this process only adds
 // what a browser cannot do: per-application audio capture. It loads a Screen
@@ -51,23 +51,23 @@ let appServer = null;
  */
 async function resolveOrigin() {
 	if (explicitUrl) {
-		console.log(`[screenroom] using SCREENROOM_URL=${explicitUrl}`);
+		console.log(`[mygletv] using SCREENROOM_URL=${explicitUrl}`);
 		return { url: explicitUrl, startupError: null };
 	}
 
 	appServer = startAppServer({ port, log: (message) => console.log(message) });
-	console.log(`[screenroom] no SCREENROOM_URL set, so starting a LOCAL server on port ${port}`);
+	console.log(`[mygletv] no SCREENROOM_URL set, so starting a LOCAL server on port ${port}`);
 	console.log(
-		"[screenroom] NOTE: a local server only reaches other clients on this machine. " +
+		"[mygletv] NOTE: a local server only reaches other clients on this machine. " +
 			"To use your deployed relay, set SCREENROOM_URL.",
 	);
 	console.log(
-		"[screenroom]       e.g. SCREENROOM_URL=https://your-worker.workers.dev/ npm start",
+		"[mygletv]       e.g. SCREENROOM_URL=https://your-worker.workers.dev/ npm start",
 	);
 
 	const healthy = await appServer.ready();
 	if (healthy) {
-		console.log(`[screenroom] server ready at ${appServer.url}`);
+		console.log(`[mygletv] server ready at ${appServer.url}`);
 		return { url: appServer.url, startupError: null };
 	}
 
@@ -77,12 +77,12 @@ async function resolveOrigin() {
 			? info.error
 			: `it exited with code ${info.code}`
 		: "it did not respond in time";
-	console.error(`[screenroom] the web server did not start: ${detail}`);
+	console.error(`[mygletv] the web server did not start: ${detail}`);
 
 	return {
 		url: appServer.url,
 		startupError: {
-			title: "The Screen Room server did not start",
+			title: "The MygleTV server did not start",
 			message: `The bundled web server could not come up on port ${port} (${detail}).`,
 			hint:
 				"Another program may already be using that port &mdash; try " +
@@ -111,14 +111,14 @@ async function boot() {
 	});
 
 	await shell.start();
-	console.log(`[screenroom] this window is on ${url}`);
+	console.log(`[mygletv] this window is on ${url}`);
 	console.log(
-		"[screenroom] two rooms with the same name on different relays cannot see each other.",
+		"[mygletv] two rooms with the same name on different relays cannot see each other.",
 	);
 }
 
 boot().catch((err) => {
-	console.error("[screenroom] failed to start:", err);
+	console.error("[mygletv] failed to start:", err);
 	app.exit(1);
 });
 

@@ -114,7 +114,7 @@ function makeFakes({ sources = [{ id: "screen:0", name: "DP-1" }], getSourcesErr
 			return {
 				mode,
 				app,
-				deviceLabel: mode === "system" ? "ScreenRoom System" : "ScreenRoom",
+				deviceLabel: mode === "system" ? "MygleTV-System" : "MygleTV",
 			};
 		},
 		async stop() {
@@ -173,7 +173,7 @@ test("the window is created locked down and loads the configured origin", async 
 });
 
 test("the window title names the relay, so two servers are distinguishable", async () => {
-	// Two Screen Room servers can both hold a room called "main". Identical room
+	// Two MygleTV servers can both hold a room called "main". Identical room
 	// names on different relays look exactly like a broken app, so the title has
 	// to say which one this window is on.
 	const { state, shell } = build();
@@ -181,7 +181,7 @@ test("the window title names the relay, so two servers are distinguishable", asy
 	const win = state.windows[0];
 
 	// Electron reports the page's own title (which carries the room).
-	win.handlers.get("page-title-updated")({ preventDefault() {} }, "#main — Screen Room");
+	win.handlers.get("page-title-updated")({ preventDefault() {} }, "#main — MygleTV");
 
 	const title = state.windowTitles[state.windowTitles.length - 1];
 	assert.match(title, /#main/, "keeps the room from the page");
@@ -237,7 +237,7 @@ test("audio:start returns the device label the renderer should capture", async (
 		ok: true,
 		mode: "app",
 		app: "Firefox",
-		deviceLabel: "ScreenRoom",
+		deviceLabel: "MygleTV",
 	});
 });
 
@@ -250,7 +250,7 @@ test("audio:start forwards whole-system mode and reports its own device", async 
 	assert.equal(result.ok, true);
 	assert.equal(result.mode, "system");
 	assert.equal(result.app, null);
-	assert.equal(result.deviceLabel, "ScreenRoom System");
+	assert.equal(result.deviceLabel, "MygleTV-System");
 	assert.equal(captureSession.activeMode, "system");
 });
 
@@ -398,7 +398,7 @@ test("zero-sized thumbnails are requested, since the picker does not need them",
 test("a startup failure is explained rather than left blank", async () => {
 	const { state, shell } = build({
 		startupError: {
-			title: "The Screen Room server did not start",
+			title: "The MygleTV server did not start",
 			message: "port 8080 is busy",
 			hint: "try another port",
 		},
@@ -409,7 +409,7 @@ test("a startup failure is explained rather than left blank", async () => {
 	assert.match(win.loadedUrl, /^data:text\/html/, "should render an explanation, not the app");
 
 	const page = decodedPage(win);
-	assert.match(page, /The Screen Room server did not start/);
+	assert.match(page, /The MygleTV server did not start/);
 	assert.match(page, /port 8080 is busy/);
 	assert.match(page, /try another port/);
 });
@@ -425,7 +425,7 @@ test("an unreachable origin is explained rather than left blank", async () => {
 
 	assert.match(win.loadedUrl, /^data:text\/html/);
 	const page = decodedPage(win);
-	assert.match(page, /Could not reach Screen Room/);
+	assert.match(page, /Could not reach MygleTV/);
 	assert.match(page, /SCREENROOM_URL/, "the explanation should say how to fix it");
 	assert.ok(
 		state.logs.some((line) => /failed to load/.test(line)),

@@ -9,7 +9,7 @@ const bridge = typeof window !== "undefined" ? window.screenroomNative : null;
 export const hasNative = Boolean(bridge);
 
 /** Must match VIRTUAL_MIC_LABEL / SYSTEM_TAP_LABEL in the desktop shell. */
-export const NATIVE_DEVICE_LABEL = "ScreenRoom";
+export const NATIVE_DEVICE_LABEL = "MygleTV";
 
 export async function listNativeApps() {
 	if (!bridge) return [];

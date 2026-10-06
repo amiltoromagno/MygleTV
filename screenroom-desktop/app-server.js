@@ -1,6 +1,6 @@
-// Starts the Screen Room web server as a child process.
+// Starts the MygleTV web server as a child process.
 //
-// The desktop shell loads a Screen Room *origin* rather than bundling the
+// The desktop shell loads a MygleTV *origin* rather than bundling the
 // frontend, because signaling.js derives its WebSocket URL from location.host.
 // That means the origin has to be served by something that also speaks the
 // signaling protocol -- so for local use the shell brings its own server up.
@@ -33,7 +33,7 @@ export async function waitForHealth({
 		try {
 			const response = await fetchImpl(health, { signal: AbortSignal.timeout(1000) });
 			// Check the body, not just the status: any web server on this port would
-			// answer 200, and we need to know it is specifically Screen Room.
+			// answer 200, and we need to know it is specifically MygleTV.
 			if (response.ok && (await response.text()).trim() === "ok") return true;
 		} catch {
 			// Not listening yet.

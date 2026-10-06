@@ -7,18 +7,21 @@
 import { DEFAULT_CAPTURE_SINK } from "./linux.js";
 
 export const VIRTUAL_MIC_NAME = "screenroom_mic";
-export const VIRTUAL_MIC_LABEL = "ScreenRoom";
+export const VIRTUAL_MIC_LABEL = "MygleTV";
 
-// The system tap is a separate source so its label is distinguishable.
+// The system tap is a separate source so its label is distinguishable from the
+// application mic's.
 //
-// The label must not contain a space. `source_properties` is parsed by splitting
-// on whitespace, so `device.description=ScreenRoom System` silently becomes just
-// "ScreenRoom" -- which then collides with the application mic's label and makes
-// the renderer's exact-match lookup fail with "the ScreenRoom System audio
-// source did not appear". Escaping the space, quoting the value and quoting the
-// whole property all truncate the same way; a hyphenated label is the fix.
+// Neither label may contain a space. `source_properties` is parsed by splitting
+// on whitespace, so a label like `ScreenRoom System` was silently truncated to
+// just `ScreenRoom` -- which then collided with the mic's label, while the
+// renderer was searching for the full string and failed with "the ScreenRoom
+// System audio source did not appear". Escaping the space, quoting the value and
+// quoting the whole property all truncate identically, so the labels are
+// hyphenated instead, and linux.js now rejects a label containing whitespace
+// outright rather than letting it truncate in silence.
 export const SYSTEM_TAP_NAME = "screenroom_system";
-export const SYSTEM_TAP_LABEL = "ScreenRoom-System";
+export const SYSTEM_TAP_LABEL = "MygleTV-System";
 
 /**
  * @param {object} options

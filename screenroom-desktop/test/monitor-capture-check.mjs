@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
 
 import { DEFAULT_CAPTURE_SINK, LinuxAudioRouter, registerExitCleanup } from "../audio/linux.js";
+import { VIRTUAL_MIC_LABEL, VIRTUAL_MIC_NAME } from "../audio/session.js";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const HTTP_PORT = 8466;
@@ -158,7 +159,7 @@ try {
 
 	// A raw monitor is invisible to Chromium, so also expose it as a normal
 	// source and see which (if either) the renderer can actually capture.
-	const mic = await router.createVirtualMic(sink.name, "screenroom_mic");
+	const mic = await router.createVirtualMic(sink.name, VIRTUAL_MIC_NAME, VIRTUAL_MIC_LABEL);
 	console.log(`  virtual mic: ${mic.name} (via module-remap-source)`);
 
 	// Play the tone directly into the sink, bypassing the routing step -- this
@@ -243,7 +244,7 @@ try {
 		if (priming) priming.getTracks().forEach(t => t.stop());
 
 		out.monitor = out.devices.find(d => /monitor/i.test(d.label)) || null;
-		out.remapped = out.devices.find(d => /screenroom/i.test(d.label)) || null;
+		out.remapped = out.devices.find(d => d.label === ${JSON.stringify(VIRTUAL_MIC_LABEL)}) || null;
 		if (!out.remapped) return out;
 
 		try {
@@ -276,7 +277,7 @@ try {
 
 	console.log(`  audio inputs Chrome can see: ${result.devices.length}`);
 	for (const device of result.devices) {
-		const remapped = /screenroom/i.test(device.label);
+		const remapped = device.label === VIRTUAL_MIC_LABEL;
 		const monitor = /monitor/i.test(device.label);
 		const mark = remapped ? green("-> virtual mic") : monitor ? green("-> raw monitor") : "";
 		console.log(`    ${device.label} ${mark}`);

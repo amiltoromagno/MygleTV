@@ -262,7 +262,7 @@ try {
 	await waitForApp(pageA);
 
 	const gateText = await pageA.evaluate("document.querySelector('.gate-card h1').textContent");
-	check(gateText === "Screen Room", "name gate is shown before entering");
+	check(gateText === "MygleTV", "name gate is shown before entering");
 	check(
 		(await pageA.evaluate("document.getElementById('gateRoom').textContent")) === ROOM,
 		"the room in the link is what the gate reports",

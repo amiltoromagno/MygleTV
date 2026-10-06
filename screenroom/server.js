@@ -1,4 +1,4 @@
-// Screen Room server.
+// MygleTV server.
 //
 // This process does exactly two things:
 //   1. serves the static frontend from ./public
@@ -308,7 +308,7 @@ wss.on("close", () => clearInterval(heartbeat));
 
 server.listen(PORT, HOST, () => {
 	const scheme = process.env.TLS_CERT ? "https" : "http";
-	log(`Screen Room listening on ${scheme}://${HOST}:${PORT}`);
+	log(`MygleTV listening on ${scheme}://${HOST}:${PORT}`);
 	log(`rooms cap ${MAX_ROOM_SIZE}; signaling at /ws`);
 });
 

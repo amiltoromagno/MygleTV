@@ -1,11 +1,23 @@
 # screenroom-cloudflare
 
-Screen Room's signaling relay as a Cloudflare Worker with one Durable Object per
+MygleTV's signaling relay as a Cloudflare Worker with one Durable Object per
 room, plus the static frontend.
 
 This replaces `screenroom/server.js` for the no-server deployment. It is a port,
 not a rewrite: the protocol is identical, and `test/relay-conformance.mjs` holds
 both implementations to the same expectations.
+
+## Why the worker is still called `screenroom`
+
+The product is MygleTV, but `wrangler.jsonc` keeps `"name": "screenroom"` on
+purpose. That name determines the deployed hostname, so renaming it would move
+the relay to a new URL and break every link already shared. The directory and the
+worker name were left alone when the product was renamed; only comments and this
+document changed.
+
+If you do want the new name, it is a one-line change plus a redeploy, and you
+accept that `screenroom.<subdomain>.workers.dev` stops being the address you
+hand out.
 
 The Worker only does two things, so there is very little to go wrong:
 

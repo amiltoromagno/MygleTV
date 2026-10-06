@@ -5,7 +5,7 @@
 //   npm run check:taploop
 //
 // The symptom: "All system audio" works once, then reports
-//   the "ScreenRoom System" audio source did not appear
+//   the "MygleTV-System" audio source did not appear
 // on every later attempt.
 //
 // So the question is narrow: after creating the tap, tearing it down and

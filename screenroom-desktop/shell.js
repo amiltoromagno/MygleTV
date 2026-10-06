@@ -9,7 +9,7 @@
 // main.js is then a composition root with almost nothing in it to get wrong.
 
 /**
- * The page shown when the Screen Room origin cannot be reached.
+ * The page shown when the MygleTV origin cannot be reached.
  *
  * A blank window is the worst possible failure mode: the user cannot tell a
  * missing server from a broken app. Exported so the wording can be tested.
@@ -54,7 +54,7 @@ export function errorPageHtml({ title, message, hint, url }) {
  * @param {object} deps.desktopCapturer  Electron desktopCapturer
  * @param {object} deps.captureSession   from audio/session.js
  * @param {object} deps.router           from audio/linux.js
- * @param {string} deps.url              Screen Room origin to load
+ * @param {string} deps.url              MygleTV origin to load
  * @param {string} deps.preloadPath      absolute path to preload.cjs
  * @param {object} [deps.startupError]   shown instead of the app when set
  * @param {Function} [deps.log]
@@ -206,7 +206,7 @@ export function createShell({
 			height: 820,
 			backgroundColor: "#0d1017",
 			autoHideMenuBar: true,
-			title: "Screen Room",
+			title: "MygleTV",
 			webPreferences: {
 				preload: preloadPath,
 				contextIsolation: true,
@@ -218,7 +218,7 @@ export function createShell({
 			mainWindow = null;
 		});
 
-		// Show which relay this window is on. Two Screen Room servers can both
+		// Show which relay this window is on. Two MygleTV servers can both
 		// hold a room called "main" -- one local, one remote -- and identical
 		// room names on different relays look exactly like a broken app. Without
 		// this in the title there is nothing on screen to tell them apart.
@@ -235,7 +235,7 @@ export function createShell({
 				showingError = true;
 				log(`[shell] failed to load ${validatedURL}: ${errorDescription} (${errorCode})`);
 				showErrorPage({
-					title: "Could not reach Screen Room",
+					title: "Could not reach MygleTV",
 					message: `Nothing answered at the address below, so there is nothing to show.`,
 					hint:
 						"Either start the web server yourself (run <code>npm start</code> in the " +

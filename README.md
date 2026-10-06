@@ -1,4 +1,4 @@
-# Screen Room
+# MygleTV
 
 Private screen sharing with **per-application audio**. Open a link, type a name,
 share your screen; everyone else watches in a grid. No accounts, no database.
@@ -19,7 +19,7 @@ pitfalls, and the plan for Windows. Read this first.
 | [`screenroom-cloudflare/`](screenroom-cloudflare) | The relay as a Worker + Durable Object | Works, deployed |
 
 The frontend is shared, not copied: the Cloudflare config serves
-`screenroom/public` directly, and the desktop client loads a Screen Room origin.
+`screenroom/public` directly, and the desktop client loads a MygleTV origin.
 One copy of the app.
 
 ## Quick start

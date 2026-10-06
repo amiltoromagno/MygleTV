@@ -1,0 +1,21 @@
+# Normalise line endings across platforms.
+#
+# This project is developed on Linux and is about to be worked on from Windows.
+# Without this, a Windows checkout with core.autocrlf=true rewrites every file
+# and produces diffs consisting entirely of line-ending changes.
+* text=auto eol=lf
+
+# Explicitly binary, so nothing tries to normalise them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.wav binary
+*.woff binary
+*.woff2 binary
+
+# Keep lockfiles out of diff noise, but do commit them so every platform
+# resolves identical dependency versions.
+package-lock.json -diff linguist-generated

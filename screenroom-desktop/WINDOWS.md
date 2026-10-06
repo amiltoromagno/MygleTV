@@ -1,0 +1,125 @@
+# MygleTV for Windows
+
+The Windows desktop client captures screen video and either one application's
+audio, all system audio, or no audio. Application capture uses WASAPI process
+loopback with descendant processes included. It does not reroute playback or
+require a virtual audio cable. The Linux implementation is unchanged.
+
+## Requirements
+
+- Windows x64, build 20348 or newer (Windows 11 is the recommended desktop target).
+- For development, Node 22.12+ is required by the pinned Electron release.
+- Installed users need neither Node nor development tools.
+- Friends only need a browser and access to the same relay.
+
+## Run in development
+
+Install each target's dependencies independently:
+
+```powershell
+npm --prefix screenroom ci
+npm --prefix screenroom-desktop ci
+npm run start:desktop
+```
+
+The Windows app connects automatically to our existing Cloudflare application:
+
+**https://screenroom.amiltoromagno.workers.dev/**
+
+Enter your name, choose audio, and share. There is no relay setup screen or
+saved server configuration. Friends open the same address in a browser.
+Explicit URL overrides remain available for development:
+
+```powershell
+$env:SCREENROOM_URL = 'http://127.0.0.1:8080/?room=development'
+npm run start:desktop
+```
+
+The `--url=` command-line option takes precedence over the environment variable,
+which takes precedence over the fixed Cloudflare address. An explicit empty
+`--url=` starts local mode for testing. In local mode the bundled Node
+signaling server listens on loopback port 8080; `SCREENROOM_PORT` overrides it.
+Local mode is for local checks, not inviting friends on other machines.
+
+On Windows, remote mode serves the current shared frontend from the app's bundled
+files on an ephemeral loopback port, and proxies only `/ws` to the chosen relay.
+This does not require changing the deployed frontend. Browser viewers continue
+using the public relay URL. **Copy invite link** copies that public URL, and the
+window title identifies the actual relay. Remote URLs must be HTTPS (HTTP is
+allowed for localhost tests).
+
+Click **Share screen**, choose **Only application**, **All system audio** or
+**No audio** inside the picker, then click a screen or window thumbnail to start.
+The audio list refreshes when the picker opens. Cancelling starts no capture.
+
+## Stream quality
+
+The Windows **Quality** button beside **Copy invite link** sets the video bitrate ceiling (0.5–100 Mbps per
+viewer), FPS (30, 60 or 120), and resolution (original, 720p, 1080p, 1440p or 4K).
+Defaults remain 4 Mbps, 30 FPS and original resolution. Changes apply to an active
+capture and its current senders; late arrivals and reconnections use the same
+profile. Audio is kept running. Preferences are saved in the Windows user data
+directory as `stream-quality.json`, independently of the local frontend port.
+
+Resolution limits preserve the source aspect ratio. The dialog reports current
+capture dimensions and frame rate from the track's settings, which is distinct
+from actual encoded FPS. The monitor, capture source, CPU/GPU and network can
+produce lower rates. A bitrate ceiling is not a constant bitrate, and audio plus
+network overhead are additional. Each viewer receives a separate stream.
+At 30 FPS the encoder favors resolution; higher FPS uses motion content hints
+and balanced degradation. Linux and standalone browser settings are unchanged.
+
+## Build
+
+```powershell
+cd screenroom-desktop
+npm run pack:windows            # executable directory
+npm run check:windows-package   # verify the built executable
+npm run dist:windows            # installer
+```
+
+Outputs:
+
+- `dist/windows/win-unpacked/MygleTV.exe` — keep the entire directory together.
+- `dist/windows/MygleTV-Setup-0.1.0-x64.exe` — installer for sharing.
+
+The frontend, bundled Node server, WebSocket dependency and Windows native addon
+are included. Native `.node` files are unpacked from ASAR. The installer is
+unsigned unless a signing certificate is supplied to electron-builder. No
+automatic updater is configured.
+
+## Verification
+
+```powershell
+npm test                      # platform-independent unit and I/O tests
+npm run spike:windows -- --tone --seconds 4
+npm run check:windows          # real Electron, sound device and WebRTC
+```
+
+`check:windows` plays 440 Hz and 880 Hz tones in separate hidden PowerShell
+processes. It exercises the real Windows native addon, isolated preload, IPC,
+stereo AudioWorklet, explicit screen picker, proxy and a late-joining browser.
+It measures the received signal to confirm that the selected process's tone
+arrives while the other process's tone is excluded. It also checks cancellation,
+stop, invalid selection, signaling reconnection, both tones in the system mix,
+video continuing after an injected audio failure, and cleanup on renderer reload.
+Quality checks cover saved preferences, resolution bounds for a late viewer,
+and live 120 FPS / bitrate parameter updates with audio still arriving.
+The hidden tone processes are supplied as test picker entries because they do
+not have application windows; real process discovery is checked separately.
+
+## Current limits
+
+- The application picker lists processes with a window, not Windows audio
+  sessions. Background applications may be absent and a listed app may be silent.
+  It identifies processes by PID and displays the window title to distinguish
+  processes with the same name.
+- A selected application exiting produces silence. Select its new process after
+  relaunching it; automatic reattachment is not implemented.
+- The PCM FIFO targets 60 ms and caps queued audio at 200 ms. Silent native gaps
+  become silence. IPC deliveries are bounded and old capture generations ignored.
+  End-to-end latency and audio/video sync with a real game and remote friend
+  still need measurement.
+- TURN remains unconfigured, so some networks cannot establish a direct media
+  connection. The relay carries signaling only; it never carries media.
+- Linux routing, capture session, shell and preload files were not modified.

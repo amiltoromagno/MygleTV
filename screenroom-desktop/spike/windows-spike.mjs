@@ -21,7 +21,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 const RATE = 48_000;
 const CHANNELS = 2;
@@ -29,6 +29,7 @@ const CHANNELS = 2;
 const args = process.argv.slice(2);
 const opts = {
 	list: args.includes("--list"),
+	tone: args.includes("--tone"),
 	system: args.includes("--system"),
 	seconds: args.includes("--seconds") ? Number(args[args.indexOf("--seconds") + 1]) : 6,
 	pid: args.includes("--pid") ? Number(args[args.indexOf("--pid") + 1]) : null,
@@ -203,6 +204,26 @@ let targetPid = opts.pid;
 let toneFile = null;
 let toneProcess = null;
 
+if (opts.tone) {
+	toneFile = writeTone({ seconds: Math.ceil(opts.seconds + 10) });
+	const script = `$player = New-Object System.Media.SoundPlayer '${toneFile.replaceAll("'", "''")}'; $player.Load(); Write-Output 'READY'; $player.PlaySync()`;
+	toneProcess = spawn("powershell.exe", ["-NoProfile", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { windowsHide: true });
+	process.on("exit", () => {
+		toneProcess.kill();
+		try { fs.unlinkSync(toneFile); } catch { /* already removed */ }
+	});
+	await new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error("Tone player did not start")), 15_000);
+		toneProcess.stdout.on("data", (data) => {
+			if (data.toString().includes("READY")) { clearTimeout(timer); resolve(); }
+		});
+		toneProcess.on("error", (err) => { clearTimeout(timer); reject(err); });
+		toneProcess.on("exit", (code) => { clearTimeout(timer); reject(new Error(`Tone player exited: ${code}`)); });
+	});
+	targetPid = toneProcess.pid;
+	console.log(`  generated tone in process ${targetPid}`);
+}
+
 if (opts.name) {
 	const match = listCandidateProcesses().find((p) =>
 		p.name.toLowerCase().includes(opts.name.toLowerCase()),
@@ -280,8 +301,7 @@ if (heard) {
 	console.log(
 		dim(
 			"The module loaded but produced nothing. Check: was the target actually\n" +
-				"playing sound? Is it Windows 10 2004 or newer? Process loopback does not\n" +
-				"exist before that build.",
+				"playing sound? Process loopback requires Windows build 20348 or newer.\n",
 		),
 	);
 } else {

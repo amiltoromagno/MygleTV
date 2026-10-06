@@ -7,6 +7,13 @@
 const bridge = typeof window !== "undefined" ? window.screenroomNative : null;
 
 export const hasNative = Boolean(bridge);
+export const isWindowsNative = bridge?.platform === "win32";
+
+export async function chooseNativeScreen(audioSelect) {
+	if (!isWindowsNative) return true;
+	const { chooseWindowsScreen } = await import("./windows-screen-picker.js");
+	return chooseWindowsScreen(bridge, audioSelect);
+}
 
 /** Must match VIRTUAL_MIC_LABEL / SYSTEM_TAP_LABEL in the desktop shell. */
 export const NATIVE_DEVICE_LABEL = "MygleTV";
@@ -37,9 +44,14 @@ export async function startNativeCapture(target) {
 export async function stopNativeCapture() {
 	if (!bridge) return;
 	try {
-		await bridge.stopCapture();
+		if (isWindowsNative) {
+			const { stopWindowsAudio } = await import("./windows-audio.js");
+			await stopWindowsAudio();
+		}
 	} catch {
-		// Best effort: the shell also restores on quit.
+		// Native capture must still stop if renderer cleanup fails.
+	} finally {
+		try { await bridge.stopCapture(); } catch { /* shell also restores on quit */ }
 	}
 }
 
@@ -64,7 +76,11 @@ export async function findNativeDevice(label = NATIVE_DEVICE_LABEL, attempts = 1
  * echo cancellation and noise suppression are tuned for speech and would chew
  * up game and music audio.
  */
-export async function captureNativeAudio(label = NATIVE_DEVICE_LABEL) {
+export async function captureNativeAudio(label = NATIVE_DEVICE_LABEL, description = null) {
+	if (isWindowsNative) {
+		const { captureWindowsAudio } = await import("./windows-audio.js");
+		return captureWindowsAudio(bridge, description);
+	}
 	const device = await findNativeDevice(label);
 	if (!device) {
 		throw new Error(`the "${label}" audio source did not appear`);

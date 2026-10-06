@@ -21,6 +21,10 @@ import { LinuxAudioRouter, registerExitCleanup } from "./audio/linux.js";
 import { createCaptureSession } from "./audio/session.js";
 import { startAppServer } from "./app-server.js";
 import { createShell } from "./shell.js";
+import { createWindowsCaptureSession } from "./audio/windows.js";
+import { createWindowsShell } from "./windows-shell.js";
+import { startWindowsRelayProxy } from "./windows-relay-proxy.js";
+import { resolveWindowsUrl, configureWindowsData } from "./windows-settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,17 +34,20 @@ function readUrlArg() {
 	return process.env.SCREENROOM_URL || "";
 }
 
-const explicitUrl = readUrlArg();
+const windows = process.platform === "win32";
+const explicitUrl = windows ? resolveWindowsUrl() : readUrlArg();
 const port = Number(process.env.SCREENROOM_PORT || 8080);
 
 const audioLog = (message) => console.log("[audio]", message);
 
-const router = new LinuxAudioRouter({ log: audioLog });
+if (windows) configureWindowsData(app);
+const router = windows ? createWindowsCaptureSession() : new LinuxAudioRouter({ log: audioLog });
 // Last line of defence: a hard exit must not leave audio routed to a sink that
 // is about to vanish.
-registerExitCleanup(router);
+if (!windows) registerExitCleanup(router);
+else process.on("exit", () => router.restoreSync());
 
-const captureSession = createCaptureSession({ router, log: audioLog });
+const captureSession = windows ? router : createCaptureSession({ router, log: audioLog });
 
 let appServer = null;
 
@@ -52,10 +59,21 @@ let appServer = null;
 async function resolveOrigin() {
 	if (explicitUrl) {
 		console.log(`[mygletv] using SCREENROOM_URL=${explicitUrl}`);
+		if (windows) {
+			appServer = await startWindowsRelayProxy({
+				relayUrl: explicitUrl,
+				publicDir: app.isPackaged ? path.join(process.resourcesPath, "screenroom", "public") : path.join(__dirname, "..", "screenroom", "public"),
+			});
+			return { url: appServer.url, startupError: null };
+		}
 		return { url: explicitUrl, startupError: null };
 	}
 
-	appServer = startAppServer({ port, log: (message) => console.log(message) });
+	appServer = startAppServer({
+		port,
+		...(windows && app.isPackaged ? { serverDir: path.join(process.resourcesPath, "screenroom") } : {}),
+		log: (message) => console.log(message),
+	});
 	console.log(`[mygletv] no SCREENROOM_URL set, so starting a LOCAL server on port ${port}`);
 	console.log(
 		"[mygletv] NOTE: a local server only reaches other clients on this machine. " +
@@ -94,9 +112,12 @@ async function resolveOrigin() {
 }
 
 async function boot() {
+	if (windows) {
+		await app.whenReady();
+	}
 	const { url, startupError } = await resolveOrigin();
 
-	const shell = createShell({
+	const shell = (windows ? createWindowsShell : createShell)({
 		app,
 		BrowserWindow,
 		ipcMain,
@@ -105,8 +126,9 @@ async function boot() {
 		captureSession,
 		router,
 		url,
-		preloadPath: path.join(__dirname, "preload.cjs"),
+		preloadPath: path.join(__dirname, windows ? "windows-preload.cjs" : "preload.cjs"),
 		startupError,
+		...(windows ? { inviteUrl: explicitUrl || url } : {}),
 		log: (message) => console.log(message),
 	});
 

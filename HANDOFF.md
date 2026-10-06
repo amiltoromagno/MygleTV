@@ -1,5 +1,11 @@
 # MygleTV — project handoff
 
+> **Windows update:** the Windows desktop implementation now exists and has passed
+> local Electron/WASAPI/WebRTC and packaged executable checks. See
+> [screenroom-desktop/WINDOWS.md](screenroom-desktop/WINDOWS.md) for the current
+> architecture, commands and remaining validation. The Windows plan below records
+> the earlier design; the Linux implementation remains unchanged.
+
 Everything a developer (or an agent) needs to understand this project and build
 the Windows client. Written to be read cold, on a machine that has never seen
 this code.

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Desktop sharing client for MygleTV, with per-application audio capture.",
   "type": "module",
+  "main": "main.js",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "spike:linux": "node spike/linux-spike.mjs",
@@ -12,7 +13,11 @@
     "start": "electron main.js",
     "check:proxy": "node test/https-proxy-check.mjs",
     "check:taploop": "node test/system-tap-repeat.mjs",
-    "spike:windows": "node spike/windows-spike.mjs"
+    "spike:windows": "node spike/windows-spike.mjs",
+    "check:windows": "electron test/windows-electron-check.mjs",
+    "check:windows-package": "node test/windows-package-check.mjs",
+    "pack:windows": "electron-builder --config electron-builder.windows.yml --win --x64 --dir",
+    "dist:windows": "electron-builder --config electron-builder.windows.yml --win --x64"
   },
   "engines": {
     "node": ">=18"
@@ -21,6 +26,10 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
-    "electron": "44.5.1"
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "optionalDependencies": {
+    "loopback-capture": "3.0.2"
   }
 }

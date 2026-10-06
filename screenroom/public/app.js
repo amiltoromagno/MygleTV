@@ -1,9 +1,14 @@
 import { DEFAULT_ROOM, DISPLAY_CONSTRAINTS } from "./config.js";
 import { connectSignaling } from "./signaling.js";
 import { Peer } from "./peers.js";
+import { WindowsPeer } from "./windows-peers.js";
+import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
+import { setupWindowsQuality } from "./windows-quality.js";
 import {
 	captureNativeAudio,
+	chooseNativeScreen,
 	hasNative,
+	isWindowsNative,
 	listNativeApps,
 	startNativeCapture,
 	stopNativeCapture,
@@ -47,6 +52,9 @@ const state = {
 	signaling: null,
 	sharing: false,
 	localStream: null,
+	localAudioTrack: null,
+	sharePending: false,
+	quality: { ...DEFAULT_QUALITY },
 	/** Streams beyond the display capture that need stopping (mic, native audio). */
 	extraStreams: [],
 	focused: null,
@@ -261,7 +269,8 @@ function makePeer(id, name, sharing) {
 	const existing = state.peers.get(id);
 	if (existing) return existing;
 
-	const peer = new Peer({
+	const peer = new (isWindowsNative ? WindowsPeer : Peer)({
+		quality: state.quality,
 		id,
 		// Both ends must agree who yields. They do: each knows both IDs.
 		polite: state.selfId > id,
@@ -291,7 +300,7 @@ function makePeer(id, name, sharing) {
 	if (state.sharing && state.localStream) {
 		peer.setScreen(
 			state.localStream.getVideoTracks()[0] || null,
-			state.localStream.getAudioTracks()[0] || null,
+			(isWindowsNative ? state.localAudioTrack : state.localStream.getAudioTracks()[0]) || null,
 		);
 	}
 
@@ -368,7 +377,9 @@ async function refreshAudioOptions() {
 	try {
 		for (const entry of await listNativeApps()) {
 			const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
-			options.push({ value: `app:${entry.app}`, label: `Only ${entry.app}${suffix}` });
+			const id = isWindowsNative ? entry.id : entry.app;
+			const detail = isWindowsNative && entry.detail ? ` — ${entry.detail}` : suffix;
+			options.push({ value: `app:${id}`, label: `Only ${entry.app}${detail}` });
 		}
 	} catch {
 		// Listing fails when nothing is playing; the other options still work.
@@ -393,12 +404,20 @@ function setupAudioPicker() {
 	if (!select) return;
 
 	select.hidden = false;
+	if (isWindowsNative) {
+		// Keep the same select and listeners across picker openings, outside the bar.
+		const storage = document.createElement("div");
+		storage.hidden = true;
+		storage.id = "windowsAudioOptions";
+		document.body.append(storage);
+		storage.append(select);
+	}
 	select.value = storedAudioChoice();
 
 	// The set of playing applications changes constantly, so refresh whenever the
 	// user reaches for the picker.
 	select.addEventListener("focus", () => {
-		refreshAudioOptions();
+		if (!isWindowsNative) refreshAudioOptions();
 	});
 	select.addEventListener("change", () => {
 		try {
@@ -408,7 +427,7 @@ function setupAudioPicker() {
 		}
 	});
 
-	refreshAudioOptions();
+	if (!isWindowsNative) refreshAudioOptions();
 }
 
 function updateShareButton() {
@@ -419,6 +438,13 @@ function updateShareButton() {
 
 async function startShare() {
 	if (state.sharing) return;
+	if (isWindowsNative) {
+		try {
+			await refreshAudioOptions();
+			if (!await chooseNativeScreen($("audioSource"))) return;
+		}
+		catch (err) { toast(err.message); return; }
+	}
 
 	// In the desktop shell the picker decides; in a browser we keep the display
 	// stream's own audio, exactly as before.
@@ -432,10 +458,11 @@ async function startShare() {
 	// by the time we go looking for it.
 	let nativeStream = null;
 	let audioWarning = null;
+	const targetName = isWindowsNative ? $("audioSource")?.selectedOptions[0]?.textContent.replace(/^Only /, "") || "the selected application" : target?.app;
 	if (target) {
 		try {
 			const started = await startNativeCapture(target);
-			nativeStream = await captureNativeAudio(started.deviceLabel);
+			nativeStream = await captureNativeAudio(started.deviceLabel, started);
 			state.extraStreams.push(nativeStream);
 		} catch (err) {
 			// A failed audio source must never stop the screen from being shared.
@@ -445,16 +472,17 @@ async function startShare() {
 			audioWarning =
 				target.mode === "system"
 					? `System audio unavailable (${err.message}). Sharing without sound.`
-					: `Could not capture ${target.app} (${err.message}). Sharing without sound.`;
+					: `Could not capture ${targetName} (${err.message}). Sharing without sound.`;
 			await stopNativeCapture();
 		}
 	}
 
 	// When the audio comes from somewhere else, don't also grab the display's.
+	const displayConstraints = isWindowsNative ? { video: videoConstraints(state.quality), audio: false } : DISPLAY_CONSTRAINTS;
 	const constraints =
 		choice === "display"
-			? DISPLAY_CONSTRAINTS
-			: Object.assign({}, DISPLAY_CONSTRAINTS, { audio: false });
+			? displayConstraints
+			: Object.assign({}, displayConstraints, { audio: false });
 
 	/** Undo the native audio setup when a share cannot proceed. */
 	async function abandonShare() {
@@ -467,6 +495,7 @@ async function startShare() {
 			}
 		}
 		await stopNativeCapture();
+		if (isWindowsNative) state.extraStreams = state.extraStreams.filter((extra) => extra !== nativeStream);
 	}
 
 	let stream;
@@ -513,12 +542,13 @@ async function startShare() {
 
 	// Tell the encoder this is text/UI, not motion. This is the single biggest
 	// factor in whether shared text is readable.
-	if (videoTrack && "contentHint" in videoTrack) videoTrack.contentHint = "detail";
+	if (videoTrack && "contentHint" in videoTrack) videoTrack.contentHint = isWindowsNative && state.quality.fps > 30 ? "motion" : "detail";
 
 	// The browser's own "Stop sharing" bar ends the track behind our back.
 	if (videoTrack) videoTrack.addEventListener("ended", () => stopShare());
 
 	state.localStream = stream;
+	state.localAudioTrack = audioTrack;
 	state.sharing = true;
 	state.signaling.setSharing(true);
 
@@ -552,6 +582,7 @@ async function stopShare() {
 		}
 	}
 	state.localStream = null;
+	state.localAudioTrack = null;
 	state.extraStreams = [];
 
 	// Puts the application's audio back on the real output.
@@ -583,7 +614,8 @@ function toast(message) {
 }
 
 async function copyInviteLink() {
-	const url = new URL(location.href);
+	const inviteBase = isWindowsNative ? await window.screenroomNative.getInviteUrl() : location.href;
+	const url = new URL(inviteBase || location.href);
 	url.searchParams.set("room", ROOM);
 	url.hash = "";
 	try {
@@ -606,6 +638,7 @@ const handlers = {
 		state.selfId = id;
 		resetPeers();
 		for (const peer of peers) makePeer(peer.id, peer.name, peer.sharing);
+		if (isWindowsNative && state.sharing) state.signaling.setSharing(true);
 		renderRoster();
 	},
 
@@ -662,13 +695,50 @@ function enterRoom(name) {
 	state.signaling = connectSignaling({ room: ROOM, name, handlers });
 
 	$("shareBtn").addEventListener("click", () => {
-		if (state.sharing) stopShare();
-		else startShare();
+		if (!isWindowsNative) {
+			if (state.sharing) stopShare(); else startShare();
+			return;
+		}
+		if (state.sharePending) return;
+		state.sharePending = true;
+		$("shareBtn").disabled = true;
+		Promise.resolve(state.sharing ? stopShare() : startShare())
+			.catch((err) => toast(err.message))
+			.finally(() => { state.sharePending = false; $("shareBtn").disabled = false; });
 	});
 	$("copyBtn").addEventListener("click", copyInviteLink);
 
 	// Only does anything inside the desktop shell.
 	setupAudioPicker();
+	if (isWindowsNative) {
+		$("shareBtn").disabled = true;
+		setupWindowsQuality({
+			getQuality: () => state.quality,
+			getTrack: () => state.localStream?.getVideoTracks()[0],
+			isBusy: () => state.sharePending,
+			toast,
+			applyQuality: async (quality) => {
+				if (state.sharePending) throw new Error("Screen sharing is busy.");
+				const previous = state.quality;
+				const track = state.localStream?.getVideoTracks()[0];
+				state.sharePending = true;
+				$("shareBtn").disabled = true;
+				try {
+					if (track) await track.applyConstraints(videoConstraints(quality));
+					state.quality = quality;
+					await Promise.all([...state.peers.values()].map((peer) => peer.setQuality(quality)));
+					if (track) track.contentHint = quality.fps > 30 ? "motion" : "detail";
+				} catch (err) {
+					state.quality = previous;
+					await Promise.allSettled([
+						...(track ? [track.applyConstraints(videoConstraints(previous))] : []),
+						...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
+					]);
+					throw err;
+				} finally { state.sharePending = false; $("shareBtn").disabled = false; }
+			},
+		}).finally(() => { $("shareBtn").disabled = false; });
+	}
 
 	document.addEventListener("keydown", (event) => {
 		if (event.key === "Escape" && state.focused) {

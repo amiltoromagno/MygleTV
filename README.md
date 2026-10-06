@@ -15,7 +15,7 @@ pitfalls, and the plan for Windows. Read this first.
 | | What it is | Status |
 | --- | --- | --- |
 | [`screenroom/`](screenroom) | The web app + a Node signaling server | Works |
-| [`screenroom-desktop/`](screenroom-desktop) | Electron client with per-app audio | **Linux works**, Windows not started |
+| [`screenroom-desktop/`](screenroom-desktop) | Electron client with per-app audio | Linux works; [Windows implemented and tested locally](screenroom-desktop/WINDOWS.md) |
 | [`screenroom-cloudflare/`](screenroom-cloudflare) | The relay as a Worker + Durable Object | Works, deployed |
 
 The frontend is shared, not copied: the Cloudflare config serves
@@ -63,7 +63,8 @@ a room called `main` and the result looks exactly like a broken app.
 
 - **Hosting with per-app audio: Linux or Windows.** macOS is out of scope; no
   browser can capture per-app audio there.
-- **Windows needs 10 build 2004+** for WASAPI process loopback.
+- **Windows needs x64 and build 20348+** for WASAPI process loopback. See
+  [Windows setup, installer and verification](screenroom-desktop/WINDOWS.md).
 - **HTTPS is mandatory in production.** `navigator.mediaDevices` does not exist
   on insecure origins, so plain HTTP breaks screen sharing. `.workers.dev` and
   any tunnel satisfy this; `localhost` counts too.

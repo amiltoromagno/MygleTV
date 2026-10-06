@@ -1,0 +1,39 @@
+appId: com.mygletv.desktop
+productName: MygleTV
+directories:
+  output: dist/windows
+files:
+  - main.js
+  - shell.js
+  - windows-shell.js
+  - windows-relay-proxy.js
+  - windows-settings.js
+  - app-server.js
+  - preload.cjs
+  - windows-preload.cjs
+  - audio/**
+  - package.json
+  - '!node_modules/loopback-capture/prebuilds/linux-x64/**'
+asarUnpack:
+  - '**/*.node'
+extraResources:
+  - from: ../screenroom
+    to: screenroom
+    filter:
+      - server.js
+      - package.json
+      - public/**
+  - from: ../screenroom/node_modules/ws
+    to: screenroom/node_modules/ws
+    filter:
+      - '**/*'
+npmRebuild: false
+win:
+  target:
+    - nsis
+  artifactName: MygleTV-Setup-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

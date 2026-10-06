@@ -135,6 +135,28 @@ try {
 	await waitFor(viewer, `(${measureScript}).target > 0.01`, "remote tone", 12000);
 	const levels = await evaluate(viewer, measureScript);
 	check(levels.target > 0.01 && levels.other < levels.target * 0.15, `selected application's audio arrives; other process excluded (${JSON.stringify(levels)})`);
+	await evaluate(viewer, `(() => {
+		const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=360;
+		const context=canvas.getContext('2d'); context.fillStyle='blue'; context.fillRect(0,0,640,360);
+		window.previewFrames=setInterval(()=>context.fillRect(0,0,640,360),100);
+		navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(10);
+		document.getElementById('shareBtn').click();
+	})()`);
+	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 2", "Windows receives a second stream");
+	check(await evaluate(host, `(() => {
+		const tile=[...document.querySelectorAll('#stage .tile')].find(t=>t.querySelector('.tile-name').textContent==='Late viewer');
+		window.remoteTile=tile; tile.click();
+		const main=tile.getBoundingClientRect(), small=document.querySelector('#stage .tile:not(.focused)').getBoundingClientRect();
+		const slider=tile.querySelector('.tile-volume'); slider.value='25'; slider.dispatchEvent(new Event('input'));
+		return small.top>=main.bottom && small.width<main.width && tile.querySelector('video').volume===0.25 && tile.classList.contains('focused');
+	})()`), "Windows keeps another stream below the focused video and adjusts its volume");
+	await evaluate(host, "remoteTile.querySelector('.tile-fullscreen').click(); true");
+	await waitFor(host, "document.fullscreenElement === remoteTile", "Windows fullscreen");
+	check(await evaluate(host, "getComputedStyle(remoteTile.querySelector('.tile-fullscreen-exit')).display !== 'none'"), "Windows full screen has a visible exit X");
+	await evaluate(host, "remoteTile.querySelector('.tile-fullscreen-exit').click(); true");
+	await waitFor(host, "!document.fullscreenElement", "Windows exits fullscreen");
+	await evaluate(viewer, "document.getElementById('shareBtn').click(); clearInterval(previewFrames); true");
+	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 1", "second stream stops");
 	await evaluate(viewer, "audioCheck.ctx.close(); true");
 	server.stop();
 	await waitFor(host, "document.getElementById('statusText').textContent !== 'Connected'", "relay drops");

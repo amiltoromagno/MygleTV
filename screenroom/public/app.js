@@ -1,6 +1,7 @@
 import { DEFAULT_ROOM, DISPLAY_CONSTRAINTS } from "./config.js";
 import { connectSignaling } from "./signaling.js";
 import { Peer } from "./peers.js";
+import { addStreamControls } from "./stream-controls.js";
 import { WindowsPeer } from "./windows-peers.js";
 import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
 import { setupWindowsQuality } from "./windows-quality.js";
@@ -113,15 +114,18 @@ function ensureTile(key, label, isSelf) {
 
 	bar.append(nameEl, badge, mute);
 	root.append(video, overlay, bar);
+	const enhancedPlayer = !hasNative || isWindowsNative;
+	if (enhancedPlayer) addStreamControls({ root, video, bar, mute, isSelf, toast });
 
 	if (!isSelf) {
-		mute.addEventListener("click", (event) => {
+		if (!enhancedPlayer) mute.addEventListener("click", (event) => {
 			event.stopPropagation();
 			video.muted = !video.muted;
 			mute.textContent = video.muted ? "🔇" : "🔊";
 		});
 		root.addEventListener("click", () => toggleFocus(key));
 		root.addEventListener("keydown", (event) => {
+			if (enhancedPlayer && event.target !== root) return;
 			if (event.key === "Enter" || event.key === " ") {
 				event.preventDefault();
 				toggleFocus(key);
@@ -211,13 +215,14 @@ function renderStage() {
 }
 
 function toggleFocus(key) {
+	if (document.fullscreenElement) return;
 	state.focused = state.focused === key ? null : key;
 	applyFocus();
 }
 
 function applyFocus() {
 	$("stage").classList.toggle("focus", Boolean(state.focused));
-	$("stage").classList.toggle("focus-preview", !hasNative && Boolean(state.focused));
+	$("stage").classList.toggle("focus-preview", (!hasNative || isWindowsNative) && Boolean(state.focused));
 	for (const [key, tile] of tiles) {
 		tile.root.classList.toggle("focused", key === state.focused);
 	}
@@ -742,7 +747,7 @@ function enterRoom(name) {
 	}
 
 	document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape" && state.focused) {
+		if (event.key === "Escape" && state.focused && !document.fullscreenElement) {
 			state.focused = null;
 			applyFocus();
 		}

@@ -69,6 +69,15 @@ network overhead are additional. Each viewer receives a separate stream.
 At 30 FPS the encoder favors resolution; higher FPS uses motion content hints
 and balanced degradation. Linux and standalone browser settings are unchanged.
 
+## Watching streams
+
+Windows and browser viewers keep the other streams as smaller tiles below a
+focused stream. Each received stream has an independent 0–100% volume slider
+and mute button; unmuting restores the previous volume. The local preview stays
+muted to avoid feedback. The full-screen button opens an individual stream;
+the **×** at the top right or **Esc** exits. Volume controls remain available
+in full screen. These playback controls do not change the shared audio track.
+
 ## Build
 
 ```powershell

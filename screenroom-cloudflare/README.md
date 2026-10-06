@@ -107,7 +107,7 @@ to add to this repository — it is configured in the dashboard:
    | --- | --- |
    | Git branch | `main` |
    | **Root directory** | `/screenroom-cloudflare/` |
-   | Build command | `npm ci && npm test` |
+   | Build command | `npm test` |
    | Deploy command | `npx wrangler deploy` (the default) |
 
 5. Save, then push a commit to trigger the first build.
@@ -145,6 +145,13 @@ told which project to build.
 deploys if the 22 protocol tests fail, so a broken commit cannot reach the live
 relay. Leave it empty if you would rather deploy unconditionally.
 
+It is deliberately `npm test` and not `npm ci && npm test`. Workers Builds
+already installs dependencies before running the build command, so an explicit
+install is duplicated work — and worse, `npm ci` hard-fails when there is no
+lockfile in the directory being built. The protocol tests import nothing but
+`node:test`, `node:assert` and `src/protocol.js`, so they need no dependencies at
+all and cannot fail for that reason.
+
 **The Worker name must match.** Cloudflare requires the Worker name in the
 dashboard to equal `name` in `wrangler.jsonc` — both are `screenroom`. Renaming
 one without the other makes every build fail. This is also why the product
@@ -161,6 +168,33 @@ Verified rather than assumed — a dry run from the repository root with
 `assets.directory` at a non-existent path fails with a non-zero exit. Since
 Workers Builds checks out the whole repository, `../screenroom/public` resolves
 correctly.
+
+### If a build fails immediately
+
+Two error signatures both mean the same thing: **the Root directory setting is
+wrong or unset**, so the build is running at the repository root rather than in
+`screenroom-cloudflare/`.
+
+```
+Installing project dependencies: bun install
+No packages! Deleted empty lockfile
+npm error The `npm ci` command can only install with an existing package-lock.json
+```
+
+```
+ERROR Missing entry-point to Worker script or to assets directory
+```
+
+The root `package.json` exists only as a convenience test runner. It has no
+dependencies and deliberately no lockfile, so "No packages!" is the giveaway that
+the build is not where it should be. In the right directory there are `wrangler`
+and `ws` to install, and a `wrangler.jsonc` for the deploy command to find.
+
+Both messages are really "wrong directory", which is why the build command is
+`npm test` rather than `npm ci && npm test` — the protocol tests import nothing
+but Node built-ins, so they behave the same wherever they run, and the wrong
+directory surfaces at the deploy step with an unmistakable error rather than as
+an npm complaint about lockfiles.
 
 ### Cost and branches
 

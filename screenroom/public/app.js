@@ -376,7 +376,7 @@ async function refreshAudioOptions() {
 	// Two things a person actually wants: one application, or everything.
 	// Anything else is noise.
 	const options = [
-		{ value: "none", label: "No audio" },
+		{ value: "none", label: isWindowsNative ? "No other audio" : "No audio" },
 		{ value: "system", label: "All system audio" },
 	];
 
@@ -385,7 +385,7 @@ async function refreshAudioOptions() {
 			const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
 			const id = isWindowsNative ? entry.id : entry.app;
 			const detail = isWindowsNative && entry.detail ? ` — ${entry.detail}` : suffix;
-			options.push({ value: `app:${id}`, label: `Only ${entry.app}${detail}` });
+			options.push({ value: `app:${id}`, label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}` });
 		}
 	} catch {
 		// Listing fails when nothing is playing; the other options still work.

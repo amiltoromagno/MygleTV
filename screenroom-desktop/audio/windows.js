@@ -21,6 +21,17 @@ export async function listWindowProcesses() {
 	return parseProcesses(stdout.trim()).filter((p) => Number(p.id) !== process.pid);
 }
 
+/** Resolve HWND owners without guessing from window titles. */
+export async function resolveWindowAudio(sources, execute = run) {
+	const handles = [...new Set(sources.map((source) => /^window:(\d+):\d+$/.exec(source.id)?.[1]).filter(Boolean))];
+	if (!handles.length) return new Map();
+	const script = `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class WindowAudioOwner { [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint owner); }'; @(${handles.join(",")}) | ForEach-Object { $ownerId = [uint32]0; [void][WindowAudioOwner]::GetWindowThreadProcessId([IntPtr]([long]$_), [ref]$ownerId); if ($ownerId -gt 0) { [pscustomobject]@{handle=[string]$_; owner=[string]$ownerId} } } | ConvertTo-Json -Compress`;
+	const { stdout } = await execute("powershell.exe", ["-NoProfile", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { encoding: "utf8", timeout: 10000, windowsHide: true, maxBuffer: 1024 * 1024 });
+	const parsed = JSON.parse(stdout.trim() || "[]");
+	const owners = new Map((Array.isArray(parsed) ? parsed : [parsed]).filter((item) => /^\d+$/.test(item.owner) && Number(item.owner) > 0).map((item) => [String(item.handle), String(item.owner)]));
+	return new Map(sources.map((source) => [source.id, owners.get(/^window:(\d+):\d+$/.exec(source.id)?.[1]) || null]));
+}
+
 /** Windows taps audio without changing the user's playback routing. */
 export function createWindowsCaptureSession({
 	loadModule = () => import("loopback-capture"),

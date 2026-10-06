@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createWindowsCaptureSession, parseProcesses } from "../audio/windows.js";
+import { createWindowsCaptureSession, parseProcesses, resolveWindowAudio } from "../audio/windows.js";
 import { PcmBuffer } from "../../screenroom/public/pcm-buffer.js";
 
 function fixture({ fails = false } = {}) {
@@ -14,6 +14,16 @@ function fixture({ fails = false } = {}) {
 	const session = createWindowsCaptureSession({ loadModule: async () => ({ default: { LoopbackCapture: Capture } }), listProcesses: async () => [{ id: "123", app: "Game" }], release: "10.0.26300", arch: "x64" });
 	return { session, instances };
 }
+
+test("window audio owner mapping uses handles, not ambiguous titles", async () => {
+	const sources = [{ id: "window:11:0", name: "Same title" }, { id: "window:12:0", name: "Same title" }, { id: "screen:0:0" }, { id: "window:99:0" }];
+	const owners = await resolveWindowAudio(sources, async () => ({ stdout: JSON.stringify([{ handle: "11", owner: "123" }, { handle: "12", owner: "456" }]) }));
+	assert.equal(owners.get(sources[0].id), "123");
+	assert.equal(owners.get(sources[1].id), "456");
+	assert.equal(owners.get(sources[2].id), null);
+	assert.equal(owners.get(sources[3].id), null);
+	assert.equal((await resolveWindowAudio([{ id: "screen:0:0" }], () => { throw new Error("Must not run for screens"); })).size, 0);
+});
 
 test("Windows picker preserves distinct processes with identical names", () => {
 	const apps = parseProcesses(JSON.stringify([{ Id: 12, ProcessName: "game", MainWindowTitle: "One" }, { Id: 14, ProcessName: "game", MainWindowTitle: "Two" }, { Id: 0, ProcessName: "invalid" }]));

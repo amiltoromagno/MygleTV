@@ -1,5 +1,6 @@
 import { createShell } from "./shell.js";
 import { createQualityStore } from "./windows-settings.js";
+import { resolveWindowAudio } from "./audio/windows.js";
 
 /** Windows-only wiring; the Linux shell and preload are unchanged. */
 export function createWindowsShell(options) {
@@ -69,8 +70,11 @@ export function createWindowsShell(options) {
 			try {
 				selected = null;
 				const sources = await desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 } });
+				let audioOwners = new Map();
+				try { audioOwners = await (options.resolveWindowAudio || resolveWindowAudio)(sources); }
+				catch (err) { options.log?.(`[audio] window owner lookup failed: ${err.message}`); }
 				offered = new Set(sources.map((source) => source.id));
-				return { ok: true, sources: sources.map(({ id, name, thumbnail }) => ({ id, name, thumbnail: thumbnail.toDataURL() })) };
+				return { ok: true, sources: sources.map(({ id, name, thumbnail }) => ({ id, name, thumbnail: thumbnail.toDataURL(), audioApp: audioOwners.get(id) || null })) };
 			} catch (err) { return { ok: false, error: err.message }; }
 		});
 		ipcMain.handle("display:select", (event, id) => {

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { app, BrowserWindow, desktopCapturer, ipcMain, session } from "electron";
-import { createWindowsCaptureSession, listWindowProcesses } from "../audio/windows.js";
+import { createWindowsCaptureSession, listWindowProcesses, resolveWindowAudio } from "../audio/windows.js";
 import { createWindowsShell } from "../windows-shell.js";
 import { startAppServer } from "../app-server.js";
 import { startWindowsRelayProxy } from "../windows-relay-proxy.js";
@@ -94,9 +94,13 @@ try {
 	assert.equal(await server.ready(), true);
 	proxy = await startWindowsRelayProxy({ relayUrl: `${server.url}?room=windows-check`, publicDir: path.resolve(root, "../screenroom/public") });
 	class HiddenWindow extends BrowserWindow { constructor(options) { super({ ...options, show: false }); } }
-	const shell = createWindowsShell({ app, BrowserWindow: HiddenWindow, desktopCapturer, ipcMain, session, captureSession: capture, router: capture, url: proxy.url, inviteUrl: proxy.inviteUrl, preloadPath: path.join(root, "windows-preload.cjs"), log: console.log });
+	// Hidden tone processes have no window; associate test thumbnails explicitly.
+	const shell = createWindowsShell({ app, BrowserWindow: HiddenWindow, desktopCapturer, ipcMain, session, captureSession: capture, router: capture, url: proxy.url, inviteUrl: proxy.inviteUrl, preloadPath: path.join(root, "windows-preload.cjs"), log: console.log, resolveWindowAudio: async (sources) => new Map(sources.map((source) => [source.id, String(target)])) });
 	await shell.start();
 	const host = shell.window;
+	const handle = host.getNativeWindowHandle();
+	const handleId = `window:${handle.length >= 8 ? handle.readBigUInt64LE() : handle.readUInt32LE()}:1`;
+	check((await resolveWindowAudio([{ id: handleId }])).get(handleId) === String(process.pid), "Windows resolves the exact native window handle to its owning process");
 	await waitFor(host, "!!document.getElementById('nameInput') && !!window.screenroomNative", "Windows preload");
 	check(await evaluate(host, "screenroomNative.platform === 'win32'"), "real Electron loads the Windows bridge");
 	check(await evaluate(host, "screenroomNative.getInviteUrl()") === proxy.inviteUrl, "invite points to the shared relay rather than the local proxy");
@@ -113,13 +117,17 @@ try {
 	await waitFor(host, "!!document.querySelector('dialog[open]')", "display picker");
 	await waitFor(host, `!!document.querySelector('#audioSource option[value="app:${target}"]')`, "audio picker");
 	check(await evaluate(host, "!!document.querySelector('dialog[open] #audioSource') && document.getElementById('audioSource').getBoundingClientRect().height > 0"), "Share screen dialog contains the visible audio selector");
+	check(await evaluate(host, "[...document.querySelectorAll('#audioSource option')].every(o=>!o.textContent.startsWith('Only ')) && document.getElementById('confirmScreenShare').disabled"), "audio names have no Only prefix and sharing requires a selected picture");
 	await evaluate(host, "[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Cancel').click(); true");
 	await waitFor(host, "!document.getElementById('shareBtn').disabled", "cancel completion");
 	check(!capture.isActive(), "cancelling the screen picker starts no audio capture");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!!document.querySelector('dialog[open]')", "display picker again");
-	await evaluate(host, `document.getElementById('audioSource').value='app:${target}'; document.getElementById('audioSource').dispatchEvent(new Event('change')); true`);
-	await evaluate(host, "document.querySelector('dialog[open] div button').click(); true");
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); true");
+	check(!capture.isActive() && await evaluate(host, "!document.getElementById('shareWindowAudio').checked && !document.getElementById('shareWindowAudio').disabled && document.querySelector('dialog[open]') !== null"), "selecting a source offers its application audio but starts neither audio nor video");
+	await evaluate(host, `document.getElementById('shareWindowAudio').click(); document.getElementById('audioSource').value='app:${other}'; document.getElementById('audioSource').dispatchEvent(new Event('change')); true`);
+	check(await evaluate(host, "!document.getElementById('shareWindowAudio').checked"), "choosing other audio replaces the selected application's audio");
+	await evaluate(host, "document.getElementById('shareWindowAudio').click(); document.getElementById('confirmScreenShare').click(); true");
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "actual screen capture");
 	check(capture.activeApp === String(target), "UI starts WASAPI capture for the selected process");
 	const viewer = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
@@ -173,6 +181,13 @@ try {
 	await waitFor(host, "!document.getElementById('shareBtn').disabled && document.getElementById('shareBtn').textContent === 'Share screen'", "stop completion");
 	check(!capture.isActive(), "stopping a share releases native capture");
 	await waitFor(viewer, "document.querySelectorAll('#stage video').length === 0", "viewer removes share");
+	await evaluate(host, "document.getElementById('shareBtn').click(); true");
+	await waitFor(host, "!!document.querySelector('dialog[open]')", "silent share picker");
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "share without selected audio");
+	check(!capture.isActive(), "leaving window audio unchecked shares video without starting native audio");
+	await evaluate(host, "document.getElementById('shareBtn').click(); true");
+	await waitFor(host, "!document.getElementById('shareBtn').disabled", "silent share stops");
 	const invalid = await evaluate(host, "screenroomNative.startCapture({mode:'app',app:'bad'})");
 	check(invalid.ok === false && !capture.isActive(), "invalid application selection returns a clean error");
 	const system = await evaluate(host, "screenroomNative.startCapture({mode:'system'})");
@@ -192,7 +207,7 @@ try {
 	failCapture = true;
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!!document.querySelector('dialog[open]')", "failure-path picker");
-	await evaluate(host, "document.querySelector('dialog[open] div button').click(); true");
+	await evaluate(host, `document.querySelector('.screen-picker-grid button').click(); document.getElementById('audioSource').value='app:${target}'; document.getElementById('audioSource').dispatchEvent(new Event('change')); document.getElementById('confirmScreenShare').click(); true`);
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "video survives audio failure");
 	check(!capture.isActive() && await evaluate(host, "/without sound/i.test(document.getElementById('toast').textContent)"), "Windows audio failure leaves video sharing with a clear warning");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");

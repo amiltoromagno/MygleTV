@@ -48,9 +48,19 @@ using the public relay URL. **Copy invite link** copies that public URL, and the
 window title identifies the actual relay. Remote URLs must be HTTPS (HTTP is
 allowed for localhost tests).
 
-Click **Share screen**, choose **Only application**, **All system audio** or
-**No audio** inside the picker, then click a screen or window thumbnail to start.
+Click **Share screen**, then select a screen or window thumbnail. When a window
+can be associated with its owning process, **Share audio from [window]** appears
+as an unchecked checkbox. The user chooses whether to enable it. **Other audio
+to share**, below the thumbnails, selects another application or all system audio
+instead. Names have no “Only” prefix. Click **Share** to start; selecting a
+thumbnail alone starts no capture. Leaving both audio choices off shares silently.
 The audio list refreshes when the picker opens. Cancelling starts no capture.
+
+Window audio uses the exact native window handle to identify its process rather
+than matching titles. Capture includes that process's descendants and may include
+other windows of the same application. Screens have no owning application;
+unavailable window associations leave the checkbox disabled while other audio
+choices remain usable.
 
 ## Stream quality
 

@@ -112,6 +112,29 @@ to add to this repository — it is configured in the dashboard:
 
 5. Save, then push a commit to trigger the first build.
 
+### Who can trigger a deploy
+
+Anyone with **push access to the repository**. The trigger is GitHub's push
+event, so Cloudflare neither knows nor cares who authored the commit.
+
+The repository is private, so a collaborator has to be added first
+(GitHub → the repository → **Settings** → **Collaborators** → add their
+username). A contributor does **not** need a Cloudflare account, dashboard
+access, or any secret: the build runs under the account that connected it, using
+an API token Workers Builds generates.
+
+**A fork will not work.** A fork is a separate repository, so Cloudflare never
+sees the push and the Worker is never rebuilt. Contributions have to happen on
+this repository.
+
+Two consequences worth stating plainly:
+
+- Pushing to any branch other than `main` produces a Preview URL and leaves
+  production alone, so "branch, check the preview, merge" is available for free.
+- Push access to `main` is deploy access to the Worker. For a small group of
+  friends that is the right trade; branch protection with required pull requests
+  is the lever if it ever needs tightening.
+
 ### Why those values
 
 **Root directory must be `/screenroom-cloudflare/`** — the directory holding

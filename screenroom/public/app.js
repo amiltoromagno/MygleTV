@@ -217,6 +217,7 @@ function toggleFocus(key) {
 
 function applyFocus() {
 	$("stage").classList.toggle("focus", Boolean(state.focused));
+	$("stage").classList.toggle("focus-preview", !hasNative && Boolean(state.focused));
 	for (const [key, tile] of tiles) {
 		tile.root.classList.toggle("focused", key === state.focused);
 	}

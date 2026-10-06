@@ -262,6 +262,21 @@ body {
 	display: none;
 }
 
+/* Browser viewers keep the other live streams below the selected screen. */
+.stage.focus.focus-preview {
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+}
+
+.stage.focus.focus-preview .tile.focused {
+	grid-column: 1 / -1;
+	order: -1;
+}
+
+.stage.focus.focus-preview .tile:not(.focused) {
+	display: block;
+	max-width: 300px;
+}
+
 /* ----------------------------------------------------------------- tiles */
 
 .tile {

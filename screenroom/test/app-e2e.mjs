@@ -344,6 +344,21 @@ try {
 	await pageA.waitFor("document.querySelectorAll('#stage .tile').length === 2", "two tiles on Alice");
 	await pageB.waitFor("document.querySelectorAll('#stage .tile').length === 2", "two tiles on Bob");
 	check(true, "two people sharing at once shows two tiles side by side");
+	await pageB.evaluate(`(() => {
+		window.focusVideo = [...document.querySelectorAll('#stage .tile')].find(tile => tile.querySelector('.tile-name').textContent === 'Alice').querySelector('video');
+		window.focusVideo.closest('.tile').click();
+	})()`);
+	const focusLayout = await pageB.evaluate(`(() => {
+		const focused = document.querySelector('#stage .focused');
+		const preview = document.querySelector('#stage .tile:not(.focused)');
+		const main = focused.getBoundingClientRect(), small = preview.getBoundingClientRect();
+		return { below: small.top >= main.bottom, smaller: small.width < main.width,
+			visible: getComputedStyle(preview).display !== 'none', sameVideo: focused.querySelector('video') === window.focusVideo };
+	})()`);
+	check(focusLayout.below && focusLayout.smaller && focusLayout.visible && focusLayout.sameVideo, "selected stream stays large with the other live stream below as a thumbnail");
+	await pageB.evaluate("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))");
+	check(await pageB.evaluate("!document.getElementById('stage').classList.contains('focus-preview')"), "Escape restores the normal stream grid");
+	await pageB.evaluate("window.focusVideo.closest('.tile').click()");
 
 	const sharingCount = await pageA.evaluate("document.querySelectorAll('#rosterList .sharing').length");
 	check(sharingCount === 2, "the roster marks both participants as sharing");
@@ -352,6 +367,7 @@ try {
 	await pageA.evaluate("document.getElementById('shareBtn').click(); true;");
 	await pageB.waitFor("document.querySelectorAll('#stage .tile').length === 1", "Bob's view to drop to one");
 	check(true, "stopping a share removes that tile for everyone");
+	check(await pageB.evaluate("!document.getElementById('stage').classList.contains('focus-preview')"), "stopping the selected stream clears the focused layout");
 
 	check(
 		(await pageA.evaluate("document.getElementById('shareBtn').textContent")) === "Share screen",

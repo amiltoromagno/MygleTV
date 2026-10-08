@@ -18,7 +18,9 @@
     "check:windows-package": "node test/windows-package-check.mjs",
     "pack:windows": "electron-builder --config electron-builder.windows.yml --win --x64 --dir",
     "dist:windows": "electron-builder --config electron-builder.windows.yml --win --x64",
-    "check:linux-parity": "node test/linux-parity-check.mjs"
+    "check:linux-parity": "node test/linux-parity-check.mjs",
+    "install:desktop": "bash scripts/install-linux-desktop.sh",
+    "uninstall:desktop": "bash scripts/install-linux-desktop.sh --uninstall"
   },
   "engines": {
     "node": ">=18"

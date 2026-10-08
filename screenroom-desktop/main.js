@@ -24,18 +24,17 @@ import { createShell } from "./shell.js";
 import { createWindowsCaptureSession } from "./audio/windows.js";
 import { createWindowsShell } from "./windows-shell.js";
 import { startWindowsRelayProxy } from "./windows-relay-proxy.js";
-import { resolveWindowsUrl, configureWindowsData } from "./windows-settings.js";
+import { resolveAppUrl } from "./app-url.js";
+import { configureWindowsData } from "./windows-settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-function readUrlArg() {
-	const fromFlag = process.argv.find((arg) => arg.startsWith("--url="));
-	if (fromFlag) return fromFlag.slice("--url=".length);
-	return process.env.SCREENROOM_URL || "";
-}
-
 const windows = process.platform === "win32";
-const explicitUrl = windows ? resolveWindowsUrl() : readUrlArg();
+// Both shells resolve the same way: `--url=` wins (an empty one forces local
+// mode), then SCREENROOM_URL, then the deployed relay. A desktop launcher has
+// nowhere to put an environment variable, so the default lives in the app --
+// otherwise a click-to-run install would silently start a local-only server.
+const explicitUrl = resolveAppUrl();
 const port = Number(process.env.SCREENROOM_PORT || 8080);
 
 const audioLog = (message) => console.log("[audio]", message);

@@ -1,13 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const WINDOWS_APP_URL = "https://screenroom.amiltoromagno.workers.dev/";
+import { DEFAULT_APP_URL, resolveAppUrl } from "./app-url.js";
 
-/** Explicit overrides are retained for development; normal launches use our app. */
-export function resolveWindowsUrl({ args = process.argv, env = process.env } = {}) {
-	const flag = args.find((arg) => arg.startsWith("--url="));
-	if (flag !== undefined) return flag.slice("--url=".length);
-	return env.SCREENROOM_URL || WINDOWS_APP_URL;
+/** The relay a normal launch uses. Shared with the Linux shell, so one value. */
+export const WINDOWS_APP_URL = DEFAULT_APP_URL;
+
+/**
+ * Windows-specific name kept for the packaging checks and existing callers.
+ * The behaviour lives in resolveAppUrl() so the two shells cannot drift apart.
+ */
+export function resolveWindowsUrl(options) {
+	return resolveAppUrl(options);
 }
 
 export function configureWindowsData(app) {

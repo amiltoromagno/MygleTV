@@ -108,16 +108,49 @@ server will not start, the shell renders an explanation saying which address
 failed and how to fix it — the first version showed an empty dark page, which
 told you nothing.
 
+## Installing on Linux
+
+So you do not have to run it from a terminal:
+
+```sh
+npm run install:desktop     # adds a MygleTV entry to the application menu
+npm run uninstall:desktop   # removes it
+```
+
+The launcher points at **this checkout**, so the menu entry always runs the
+current code and there is nothing to rebuild after a `git pull`. The trade-off is
+that moving or deleting the checkout breaks the entry — run `uninstall:desktop`
+before relocating it.
+
+It writes two files, both per-user and both trivially reversible:
+
+```
+~/.local/share/applications/mygletv.desktop
+~/.local/share/icons/hicolor/scalable/apps/mygletv.svg
+```
+
+**No environment variable is needed.** `main.js` defaults to the deployed relay,
+the same way the Windows build does, so a launcher has nothing to configure.
+Point it elsewhere only if you want a different relay:
+
+```sh
+SCREENROOM_URL=https://other-relay.example/ npm start
+--url=            # start local mode instead (bundled server, this machine only)
+```
+
 ## Commands
 
 ```sh
-npm test                    # 80 unit tests, no sound server needed
+npm test                    # 109 unit tests, no sound server needed
+npm run start               # run the app (menu entry does this too)
 npm run spike:linux -- --list      # probe the environment
 npm run spike:linux -- --tone      # self-test with a generated tone
 npm run spike:linux -- --app firefox
 npm run check:monitor       # can Chromium capture the source? (real PipeWire)
 npm run check:shell         # frontend <-> bridge integration (real Chrome)
 npm run check:proxy         # works behind a TLS reverse proxy (real Chrome)
+npm run check:taploop       # the system tap survives create/destroy cycles
+npm run check:linux-parity  # the Linux client renders the full player and quality
 ```
 
 `--tone` generates a gated sine, routes it, records the monitor and checks the

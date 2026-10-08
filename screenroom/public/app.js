@@ -56,6 +56,7 @@ const state = {
 	localStream: null,
 	localAudioTrack: null,
 	sharePending: false,
+	shareTask: null,
 	kicked: false,
 	quality: { ...DEFAULT_QUALITY },
 	/** Streams beyond the display capture that need stopping (mic, native audio). */
@@ -235,7 +236,9 @@ function applyFocus() {
 // Roster
 // ---------------------------------------------------------------------------
 
+let memberMenu = null;
 function renderRoster() {
+	memberMenu?.close();
 	const list = $("rosterList");
 	const entries = state.kicked ? [] : [{ name: state.name, sharing: state.sharing, self: true }];
 	for (const [id, info] of state.info) {
@@ -262,7 +265,9 @@ function renderRoster() {
 			content.dataset.peerId = entry.id;
 			content.title = `Manage ${entry.name}`;
 			content.setAttribute("aria-label", `Manage ${entry.name}`);
-			content.addEventListener("click", () => confirmKick(entry.id));
+			content.setAttribute("aria-haspopup", "menu");
+			content.setAttribute("aria-expanded", "false");
+			content.addEventListener("click", () => openMemberMenu(entry.id, content));
 			item.append(content);
 		}
 		content.append(dot, name);
@@ -279,6 +284,51 @@ function renderRoster() {
 
 	$("rosterCount").textContent = entries.length ? `(${entries.length})` : "";
 	renderStage();
+}
+
+function openMemberMenu(id, anchor) {
+	const wasOpen = memberMenu?.anchor === anchor;
+	memberMenu?.close();
+	if (wasOpen || state.kicked || !state.info.has(id)) return;
+	const menu = document.createElement("div");
+	menu.id = "memberMenu";
+	menu.className = "member-menu";
+	menu.setAttribute("role", "menu");
+	menu.setAttribute("aria-label", `Actions for ${state.info.get(id).name}`);
+	const kick = document.createElement("button");
+	kick.type = "button";
+	kick.id = "kickMemberOption";
+	kick.setAttribute("role", "menuitem");
+	kick.textContent = "Kick from session";
+	menu.append(kick);
+	document.body.append(menu);
+	const bounds = anchor.getBoundingClientRect();
+	menu.style.left = `${Math.max(8, Math.min(bounds.left, innerWidth - menu.offsetWidth - 8))}px`;
+	menu.style.top = `${Math.max(8, Math.min(bounds.bottom + 4, innerHeight - menu.offsetHeight - 8))}px`;
+	const close = () => {
+		menu.remove();
+		anchor.setAttribute("aria-expanded", "false");
+		document.removeEventListener("pointerdown", outside, true);
+		document.removeEventListener("keydown", keyboard, true);
+		window.removeEventListener("resize", close);
+		window.removeEventListener("scroll", close, true);
+		memberMenu = null;
+	};
+	const outside = (event) => { if (!menu.contains(event.target) && !anchor.contains(event.target)) close(); };
+	const keyboard = (event) => {
+		if (event.key === "Escape" || event.key === "Tab") {
+			close();
+			if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); anchor.focus(); }
+		}
+	};
+	kick.addEventListener("click", () => { close(); anchor.focus(); confirmKick(id); });
+	document.addEventListener("pointerdown", outside, true);
+	document.addEventListener("keydown", keyboard, true);
+	window.addEventListener("resize", close);
+	window.addEventListener("scroll", close, true);
+	memberMenu = { anchor, close };
+	anchor.setAttribute("aria-expanded", "true");
+	kick.focus();
 }
 
 function confirmKick(id) {
@@ -498,6 +548,7 @@ async function startShare() {
 	if (isWindowsNative) {
 		try {
 			await refreshAudioOptions();
+			if (state.kicked) return;
 			if (!await chooseNativeScreen($("audioSource"))) return;
 		}
 		catch (err) { toast(err.message); return; }
@@ -706,19 +757,20 @@ async function copyInviteLink() {
 const handlers = {
 	onStatus: setStatus,
 	onKicked() {
-		state.kicked = true;
-		$("shareBtn").disabled = true;
-		for (const dialog of document.querySelectorAll("dialog[open]")) {
-			dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
-			if (dialog.open) dialog.close();
+		void leaveKickedRoom();
+	},
+	onRoomState(peers) {
+		const others = peers.filter((peer) => peer.id !== state.selfId);
+		const present = new Set(others.map((peer) => peer.id));
+		for (const id of [...state.peers.keys()]) if (!present.has(id)) removePeer(id);
+		for (const peer of others) {
+			makePeer(peer.id, peer.name, peer.sharing);
+			Object.assign(state.info.get(peer.id), { name: peer.name, sharing: peer.sharing === true });
 		}
-		resetPeers();
-		void stopShare().catch((err) => console.error(err));
-		const notice = document.createElement("p");
-		notice.className = "session-removed";
-		notice.setAttribute("role", "alert");
-		notice.textContent = "You were removed from this room. Your stream has stopped. Reload the page or app to join again.";
-		$("app").prepend(notice);
+		renderRoster();
+	},
+	onKickConfirmed() {
+		toast("Participant removed from the room for everyone.");
 	},
 
 	onWelcome({ id, peers }) {
@@ -767,12 +819,43 @@ const handlers = {
 	},
 };
 
+async function leaveKickedRoom() {
+	state.kicked = true;
+	state.signaling?.close();
+	$("shareBtn").disabled = true;
+	const join = $("gateForm").querySelector("button[type=submit]");
+	join.disabled = true;
+	for (const dialog of document.querySelectorAll("dialog[open]")) {
+		dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+		if (dialog.open) dialog.close();
+	}
+	resetPeers();
+	const stopping = stopShare();
+	$("app").hidden = true;
+	$("gate").hidden = false;
+	$("nameInput").value = "";
+	$("gateNote").hidden = false;
+	$("gateNote").textContent = "You were removed from the room. Enter your name and join again to share.";
+	try { localStorage.removeItem(NAME_STORAGE_KEY); } catch { /* unavailable storage */ }
+	if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+	await Promise.allSettled([stopping, state.shareTask]);
+	await stopNativeCapture().catch((err) => console.error(err));
+	state.selfId = null;
+	state.name = "";
+	join.disabled = false;
+	$("nameInput").focus();
+}
+
 // ---------------------------------------------------------------------------
 // Entry
 // ---------------------------------------------------------------------------
 
+let controlsInitialized = false;
 function enterRoom(name) {
+	state.signaling?.close();
+	state.kicked = false;
 	state.name = name;
+	$("gateNote").hidden = true;
 
 	$("gate").hidden = true;
 	$("app").hidden = false;
@@ -780,15 +863,24 @@ function enterRoom(name) {
 	document.title = `#${ROOM} — MygleTV`;
 
 	state.signaling = connectSignaling({ room: ROOM, name, handlers });
+	if (!controlsInitialized) {
+		controlsInitialized = true;
+		setupRoomControls();
+	}
+	$("shareBtn").disabled = state.sharePending || !$("qualityBtn");
+	updateShareButton();
+	renderRoster();
+}
 
+function setupRoomControls() {
 	$("shareBtn").addEventListener("click", () => {
 		// One path for every client. Without the guard a second click opens a
 		// second screen picker, because state.sharing stays false until the first
 		// one resolves -- and on a desktop shell the picker can be open for a while.
-		if (state.sharePending) return;
+		if (state.sharePending || state.kicked) return;
 		state.sharePending = true;
 		$("shareBtn").disabled = true;
-		Promise.resolve(state.sharing ? stopShare() : startShare())
+		state.shareTask = Promise.resolve(state.sharing ? stopShare() : startShare())
 			.catch((err) => toast(err.message))
 			.finally(() => { state.sharePending = false; $("shareBtn").disabled = state.kicked; });
 	});
@@ -859,6 +951,7 @@ function init() {
 
 	$("gateForm").addEventListener("submit", (event) => {
 		event.preventDefault();
+		if ($("gateForm").querySelector("button[type=submit]").disabled || !$("app").hidden) return;
 		if (!ROOM_PATTERN.test(ROOM)) return;
 		const name = $("nameInput").value.trim().slice(0, 32);
 		if (!name) return;

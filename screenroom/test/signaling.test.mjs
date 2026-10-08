@@ -121,6 +121,28 @@ test("kick removes only the chosen session, not names or other rooms", async () 
 	} finally { clients.forEach((client) => client.close()); }
 });
 
+test("removed login cannot reconnect, but an explicit new login can join", async () => {
+	const moderator = connect(), target = connect();
+	const clients = [moderator, target];
+	try {
+		await Promise.all(clients.map((client) => client.opened));
+		moderator.send({ t: "join", room: "session-removal", name: "Moderator" });
+		await moderator.waitFor((m) => m.t === "welcome", "moderator welcome");
+		target.send({ t: "join", room: "session-removal", name: "Target", session: "removed-login-123456" });
+		const { id } = await target.waitFor((m) => m.t === "welcome", "target welcome");
+		moderator.send({ t: "kick", to: id });
+		await moderator.waitFor((m) => m.t === "kick-confirmed", "kick confirmed");
+		const retry = connect(); clients.push(retry); await retry.opened;
+		const closed = new Promise((resolve) => retry.ws.once("close", (code) => resolve(code)));
+		retry.send({ t: "join", room: "session-removal", name: "Target", session: "removed-login-123456" });
+		await retry.waitFor((m) => m.t === "kicked", "retry rejected");
+		assert.equal(await closed, 4003);
+		const fresh = connect(); clients.push(fresh); await fresh.opened;
+		fresh.send({ t: "join", room: "session-removal", name: "Target", session: "new-login-123456789" });
+		assert.equal((await fresh.waitFor((m) => m.t === "welcome", "fresh login")).peers.length, 1);
+	} finally { clients.forEach((client) => client.close()); }
+});
+
 test("a joining client is welcomed with an empty peer list", async () => {
 	const alice = connect();
 	await alice.opened;

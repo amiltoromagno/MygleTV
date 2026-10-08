@@ -14,6 +14,8 @@ export function connectSignaling({ room, name, handlers }) {
 	let attempt = 0;
 	let retryTimer = null;
 	let joinedId = null;
+	// Reconnects belong to this login; an explicit Join creates a fresh session.
+	const session = crypto.randomUUID();
 
 	function kicked() {
 		if (closedByUs) return;
@@ -52,7 +54,7 @@ export function connectSignaling({ room, name, handlers }) {
 
 		socket.onopen = () => {
 			attempt = 0;
-			send({ t: "join", room, name });
+			send({ t: "join", room, name, session });
 		};
 
 		socket.onmessage = (event) => {
@@ -79,6 +81,12 @@ export function connectSignaling({ room, name, handlers }) {
 					break;
 				case "peer-leave":
 					handlers.onPeerLeave(msg.id);
+					break;
+				case "room-state":
+					handlers.onRoomState?.(msg.peers || []);
+					break;
+				case "kick-confirmed":
+					handlers.onKickConfirmed?.(msg.id);
 					break;
 				case "peer-name":
 					handlers.onPeerName(msg.id, msg.name);

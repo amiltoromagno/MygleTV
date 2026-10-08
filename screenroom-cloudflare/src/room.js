@@ -79,36 +79,44 @@ export class Room extends DurableObject {
 		if (msg.t === "join") {
 			// Joining twice would duplicate the member in everyone's roster.
 			if (attachment.joined) return;
+			const session = typeof msg.session === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(msg.session) ? msg.session : null;
+			const removed = session ? await this.ctx.storage.get("removedSessions") || [] : [];
+			if (session && removed.some(([token, expires]) => token === session && expires > Date.now())) {
+				ws.serializeAttachment({ ...attachment, expelled: true });
+				this.send(ws, { t: "kicked" });
+				ws.close(4003, "Removed from room");
+				return;
+			}
 
-			const { name, effects } = describeJoin(members, attachment.id, msg.name);
-			ws.serializeAttachment({ ...attachment, name, joined: true });
-			this.apply(effects);
+			const { name, effects } = describeJoin(this.members().map(stripSocket), attachment.id, msg.name);
+			ws.serializeAttachment({ ...attachment, name, session, joined: true });
+			await this.apply(effects);
 			return;
 		}
 
 		const { patch, effects } = describeMessage(members, attachment.id, msg);
 		if (patch) ws.serializeAttachment({ ...attachment, ...patch });
-		this.apply(effects);
+		await this.apply(effects);
 	}
 
 	async webSocketClose(ws) {
-		this.leave(ws);
+		await this.leave(ws);
 	}
 
 	async webSocketError(ws) {
-		this.leave(ws);
+		await this.leave(ws);
 	}
 
-	leave(ws) {
+	async leave(ws) {
 		const attachment = ws.deserializeAttachment() || {};
 		// describeLeave takes the member's own record, because by the time a close
 		// is handled the socket may already be gone from getWebSockets().
 		const { effects } = describeLeave(attachment);
 		ws.serializeAttachment({ ...attachment, joined: false });
-		this.apply(effects);
+		await this.apply(effects);
 	}
 
-	apply(effects) {
+	async apply(effects) {
 		if (!effects || effects.length === 0) return;
 
 		const byId = new Map(this.members().map((member) => [member.id, member.ws]));
@@ -119,11 +127,22 @@ export class Room extends DurableObject {
 				if (!target) continue;
 				const attachment = target.deserializeAttachment() || {};
 				if (!attachment.joined) continue;
+				if (attachment.session) {
+					const now = Date.now();
+					const removed = (await this.ctx.storage.get("removedSessions") || []).filter(([, expires]) => expires > now);
+					removed.push([attachment.session, now + 24 * 60 * 60 * 1000]);
+					await this.ctx.storage.put("removedSessions", removed);
+				}
 				// Persist removal before closing: a closing socket can still be listed
 				// by the hibernation API and must not rejoin or relay more messages.
 				target.serializeAttachment({ ...attachment, joined: false, expelled: true });
 				this.send(target, { t: "kicked" });
-				this.apply(describeLeave(attachment).effects);
+				await this.apply(describeLeave(attachment).effects);
+				const joined = this.members().filter((member) => member.joined);
+				const peers = joined.map(({ id, name, sharing }) => ({ id, name, sharing }));
+				for (const member of joined) this.send(member.ws, { t: "room-state", peers });
+				const requester = byId.get(effect.from);
+				if (requester) this.send(requester, { t: "kick-confirmed", id: effect.to });
 				try { target.close(4003, "Removed from room"); } catch { /* already closed */ }
 			} else if (effect.type === "reply" || effect.type === "send") {
 				const target = byId.get(effect.to);

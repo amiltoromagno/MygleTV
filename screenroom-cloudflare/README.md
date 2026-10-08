@@ -100,8 +100,15 @@ not a display name or a participant in another room. Any member may kick another
 member. The removed client receives `kicked` and close code 4003; the room receives
 `peer-leave` once. Removal is persisted in the socket attachment before closing,
 so hibernation or queued messages cannot restore that connection. Updated clients
-stop media capture and do not automatically reconnect. This is session removal,
-not a permanent ban. Deploy the updated Worker as well as the frontend.
+stop media capture and return to the name gate. A new explicit **Join room**
+creates a new login token; automatic reconnects reuse the existing token. Removed
+tokens are recorded in Durable Object storage for 24 hours (expired records are
+pruned on the next kick), so an interrupted close or hibernation cannot restore
+the login. The Node adapter uses an in-memory map with the same expiry. Each kick
+also broadcasts `room-state` to the remaining members and replies with
+`kick-confirmed` to its sender. This is session removal, not a permanent ban.
+Deploy the updated Worker as well as the frontend, reload open browser tabs, and
+update Windows installations so all participants run the current client.
 
 Cloudflare's own Git integration is called **Workers Builds**. There is nothing
 to add to this repository — it is configured in the dashboard:

@@ -242,12 +242,13 @@ try {
 	await evaluate(host, "document.getElementById('nameInput').value='Windows host'; document.getElementById('gateForm').requestSubmit(); true");
 	await waitFor(host, "document.getElementById('statusText').textContent === 'Connected' && !document.getElementById('shareBtn').disabled", "host rejoins for moderation check");
 	await evaluate(host, "document.querySelector('#rosterList .roster-member').click(); true");
-	check(await evaluate(host, "document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Late viewer')"), "Windows roster click opens a kick confirmation for the selected member");
+	check(await evaluate(host, "!!document.getElementById('memberMenu') && !document.getElementById('kickDialog')"), "Windows roster click opens a menu without immediate kick confirmation");
+	await evaluate(host, "document.getElementById('kickMemberOption').click(); true");
+	check(await evaluate(host, "document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Late viewer')"), "Windows kick menu option opens confirmation for the selected member");
 	await evaluate(host, "document.getElementById('confirmKick').click(); true");
 	await waitFor(viewer, "document.getElementById('statusText').textContent === 'Removed from room'", "Windows kicks browser participant");
 	await waitFor(host, "document.querySelectorAll('#rosterList li').length === 1", "Windows removes browser from roster");
-	viewer.webContents.reload();
-	await waitFor(viewer, "!!document.getElementById('gateForm')", "viewer reload");
+	await waitFor(viewer, "!document.getElementById('gate').hidden && !document.querySelector('#gateForm button').disabled", "viewer returns to Join room");
 	await evaluate(viewer, "document.getElementById('nameInput').value='Late viewer'; document.getElementById('gateForm').requestSubmit(); true");
 	await waitFor(viewer, "document.querySelectorAll('#rosterList li').length === 2", "viewer explicitly rejoins");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
@@ -257,11 +258,15 @@ try {
 	check(capture.isActive(), "native audio is active before removal");
 	await waitFor(viewer, "document.querySelector('#stage video')?.videoWidth > 0", "viewer receives Windows stream before kick");
 	await evaluate(host, "window.captureBeforeKick=document.querySelector('#stage video').srcObject; true");
-	await evaluate(viewer, "document.querySelector('#rosterList .roster-member').click(); document.getElementById('confirmKick').click(); true");
+	await evaluate(viewer, "document.querySelector('#rosterList .roster-member').click(); document.getElementById('kickMemberOption').click(); document.getElementById('confirmKick').click(); true");
 	await waitFor(host, "document.getElementById('statusText').textContent === 'Removed from room' && captureBeforeKick.getTracks().every(t=>t.readyState==='ended')", "browser kicks Windows sharer");
 	await sleep(800);
-	check(!capture.isActive() && await evaluate(host, "document.getElementById('shareBtn').disabled && !!document.querySelector('.session-removed')"), "kick stops Windows WASAPI and video and prevents automatic rejoining");
+	check(!capture.isActive() && await evaluate(host, "document.getElementById('app').hidden && !document.getElementById('gate').hidden && document.getElementById('nameInput').value === ''"), "kick stops Windows WASAPI and video and logs the user out to Join room");
 	check(await evaluate(viewer, "document.querySelectorAll('#rosterList li').length === 1 && document.querySelectorAll('#stage video').length === 0"), "kick removes Windows stream and roster entry from the web");
+	await waitFor(host, "!document.querySelector('#gateForm button').disabled", "Windows cleanup finishes before rejoin");
+	await evaluate(host, "document.getElementById('nameInput').value='Windows host'; document.getElementById('gateForm').requestSubmit(); true");
+	await waitFor(host, "document.getElementById('statusText').textContent === 'Connected'", "Windows explicitly rejoins without reload");
+	check(await evaluate(host, "document.querySelectorAll('#qualityBtn').length === 1"), "Windows rejoin reuses controls instead of duplicating them");
 	code = 0;
 } catch (err) {
 	console.error(err.stack);

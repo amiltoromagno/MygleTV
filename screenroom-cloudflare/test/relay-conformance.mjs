@@ -75,6 +75,10 @@ const otherRoom = `${room}-other`;
 let alice;
 let bob;
 let carol;
+let observer;
+let retry;
+let fresh;
+const session = `session-${room}`;
 
 try {
 	console.log(`\nProtocol conformance against ${base}\n`);
@@ -88,7 +92,7 @@ try {
 
 	bob = connect(room);
 	await bob.opened;
-	bob.send({ t: "join", room, name: "Bob" });
+	bob.send({ t: "join", room, name: "Bob", session });
 	const welcomeB = await bob.waitFor((m) => m.t === "welcome", "Bob's welcome");
 	check(
 		welcomeB.peers.length === 1 && welcomeB.peers[0].name === "Alice",
@@ -139,6 +143,10 @@ try {
 		"a socket that never joined cannot relay",
 	);
 	stranger.close();
+	observer = connect(room);
+	await observer.opened;
+	observer.send({ t: "join", room, name: "Observer" });
+	await observer.waitFor((m) => m.t === "welcome", "third member welcome");
 
 	// Kicking cannot reach a different room.
 	alice.send({ t: "kick", to: welcomeC.id });
@@ -150,15 +158,30 @@ try {
 	check(await kickedClose === 4003, "kicked session receives a removal notice and close code");
 	const departed = await alice.waitFor((m) => m.t === "peer-leave", "peer-leave");
 	check(departed.id === welcomeB.id, "a departure is announced to the room");
+	await observer.waitFor((m) => m.t === "peer-leave" && m.id === welcomeB.id, "third member sees removal");
+	const roster = await observer.waitFor((m) => m.t === "room-state", "authoritative room state");
+	check(roster.peers.length === 2 && !roster.peers.some((p) => p.id === welcomeB.id), "third member receives the room state without the kicked participant");
+	await alice.waitFor((m) => m.t === "kick-confirmed" && m.id === welcomeB.id, "server kick acknowledgement");
 	await sleep(200);
 	check(alice.messages.filter((m) => m.t === "peer-leave" && m.id === welcomeB.id).length === 1, "kick announces departure exactly once");
+	retry = connect(room);
+	await retry.opened;
+	const retryClosed = new Promise((resolve) => retry.ws.once("close", (code) => resolve(code)));
+	retry.send({ t: "join", room, name: "Bob", session });
+	await retry.waitFor((m) => m.t === "kicked", "removed login cannot reconnect");
+	check(await retryClosed === 4003, "automatic reconnection of a removed login is rejected by the server");
+	fresh = connect(room);
+	await fresh.opened;
+	fresh.send({ t: "join", room, name: "Bob", session: `${session}-fresh` });
+	const freshWelcome = await fresh.waitFor((m) => m.t === "welcome", "explicit fresh login");
+	check(freshWelcome.peers.length === 2, "explicit new login can rejoin with the same display name");
 
 	alice.close();
 	carol.close();
 } catch (err) {
 	check(false, `unexpected failure: ${err.message}`);
 } finally {
-	for (const socket of [alice, bob, carol]) {
+	for (const socket of [alice, bob, carol, observer, retry, fresh]) {
 		try {
 			socket?.close();
 		} catch {

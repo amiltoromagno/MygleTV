@@ -55,7 +55,7 @@ export function describeMessage(members, id, msg) {
 		if (typeof msg.to !== "string" || msg.to === id || !members.some((m) => m.id === msg.to && m.joined)) {
 			return { effects: [{ type: "reply", to: id, message: { t: "error", message: "That participant is no longer available to kick." } }] };
 		}
-		return { effects: [{ type: "kick", to: msg.to }] };
+		return { effects: [{ type: "kick", to: msg.to, from: id }] };
 	}
 
 	if (msg.t === "signal") {

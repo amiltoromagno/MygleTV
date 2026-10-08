@@ -102,6 +102,9 @@ function serveStatic(req, res) {
 
 /** @type {Map<string, Map<string, object>>} room name -> (client id -> client) */
 const rooms = new Map();
+// Keep a removed login from returning through an automatic socket reconnect.
+const removedSessions = new Map();
+const REMOVAL_TTL = 24 * 60 * 60 * 1000;
 
 let idCounter = 0;
 function nextId() {
@@ -150,6 +153,13 @@ function joinRoom(client, msg) {
 	}
 
 	const name = cleanName(msg.name) || "Guest";
+	const session = typeof msg.session === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(msg.session) ? msg.session : null;
+	if (session && (removedSessions.get(`${roomName}:${session}`) || 0) > Date.now()) {
+		client.expelled = true;
+		send(client, { t: "kicked" });
+		client.ws.close(4003, "Removed from room");
+		return;
+	}
 
 	let room = rooms.get(roomName);
 	if (!room) {
@@ -162,6 +172,7 @@ function joinRoom(client, msg) {
 	}
 
 	client.room = roomName;
+	client.session = session;
 	client.name = name;
 	client.sharing = false;
 
@@ -213,8 +224,11 @@ function route(client, msg) {
 				break;
 			}
 			target.expelled = true;
+			if (target.session) removedSessions.set(`${client.room}:${target.session}`, Date.now() + REMOVAL_TTL);
 			send(target, { t: "kicked" });
 			leaveRoom(target);
+			broadcast(room, { t: "room-state", peers: [...room.values()].map(({ id, name, sharing }) => ({ id, name, sharing })) });
+			send(client, { t: "kick-confirmed", id: target.id });
 			target.ws.close(4003, "Removed from room");
 			break;
 		}
@@ -303,6 +317,7 @@ wss.on("connection", (ws) => {
 });
 
 const heartbeat = setInterval(() => {
+	for (const [key, expires] of removedSessions) if (expires <= Date.now()) removedSessions.delete(key);
 	for (const ws of wss.clients) {
 		if (ws.isAlive === false) {
 			ws.terminate();

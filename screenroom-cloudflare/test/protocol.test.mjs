@@ -27,7 +27,7 @@ const member = (id, extra = {}) => ({
 
 test("a joined member can kick a specific joined peer even with duplicate names", () => {
 	const members = [member("p1", { name: "Same" }), member("p2", { name: "Same" }), member("p3")];
-	assert.deepEqual(describeMessage(members, "p1", { t: "kick", to: "p2" }), { effects: [{ type: "kick", to: "p2" }] });
+	assert.deepEqual(describeMessage(members, "p1", { t: "kick", to: "p2" }), { effects: [{ type: "kick", to: "p2", from: "p1" }] });
 });
 
 test("kick rejects self, unknown and unjoined targets", () => {

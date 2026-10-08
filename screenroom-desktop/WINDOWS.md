@@ -97,11 +97,19 @@ still fills the monitor. A custom Windows caption provides minimize, maximize /
 restore and close in the normal view.
 
 In Windows and browser clients, click another participant under **In this room**
-and confirm **Kick from session** to remove their current connection. Any joined
+to open their actions menu, choose **Kick from session**, then confirm to remove
+their current connection. Clicking a name does not immediately open the kick
+confirmation. Escape, clicking outside, or clicking the name again dismisses
+the menu. Any joined
 participant can do this; there are no administrator roles. The relay removes the
-member for everyone, their client stops capture, and automatic reconnection is
-disabled. Removal targets a session ID, so duplicate display names are safe.
-This is not a permanent ban: reloading lets the participant join deliberately.
+member and stream for everyone, stops capture, and returns the removed client
+to **Join room** with the name cleared. They must enter a name and explicitly
+join before sharing again; reloading is unnecessary. Controls initialize once,
+so rejoining does not duplicate listeners or quality controls. The server rejects
+reconnections with the removed login token for 24 hours; an explicit join creates
+a fresh token. Removal targets a session ID, so duplicate display names are safe.
+This is not a permanent ban. The relay also confirms the kick and sends the
+remaining participants the authoritative member list.
 The Cloudflare Worker and clients must both be updated for this feature.
 
 ## Build

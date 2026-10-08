@@ -569,6 +569,29 @@ body.in-app-fullscreen .stage .tile.in-app-player {
 }
 .roster-member:hover .roster-name { color: var(--accent); }
 .roster-member:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.member-menu {
+	position: fixed;
+	z-index: 300;
+	min-width: 180px;
+	padding: 6px;
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 9px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.member-menu button {
+	width: 100%;
+	padding: 9px 12px;
+	font: inherit;
+	text-align: left;
+	color: #ffb3c0;
+	background: transparent;
+	border: 0;
+	border-radius: 5px;
+	cursor: pointer;
+}
+.member-menu button:hover,
+.member-menu button:focus-visible { background: var(--panel-2); outline: 2px solid var(--accent); }
 .kick-dialog {
 	color: var(--text);
 	background: var(--panel);
@@ -582,7 +605,6 @@ body.in-app-fullscreen .stage .tile.in-app-player {
 .kick-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 .btn-danger { background: #6b2633; border-color: #9a3b4c; }
 .btn-danger:hover { background: #8b3040; }
-.session-removed { margin: 0; padding: 16px; color: var(--warn); background: var(--panel); }
 
 .roster-dot {
 	width: 7px;

@@ -402,16 +402,40 @@ try {
 	);
 
 	check(await pageA.evaluate("!document.querySelector('#rosterList li:first-child button')"), "your own roster entry cannot kick yourself");
+	await launchBrowser(9335);
+	const pageC = await openPage(9335);
+	await pageC.send("Page.navigate", { url: APP_URL });
+	await join(pageC, "Observer");
+	await pageC.waitFor("document.querySelector('#stage video')?.videoWidth > 0", "third participant receives Bob's stream");
+	await pageA.waitFor("document.querySelectorAll('#rosterList li').length === 3", "three participants join");
 	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); true");
-	check(await pageA.evaluate("document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Bob')"), "clicking a participant opens their kick confirmation");
+	check(await pageA.evaluate("!!document.getElementById('memberMenu') && !document.getElementById('kickDialog')"), "clicking a participant opens an action menu without kick confirmation");
+	await pageA.evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); true");
+	check(await pageA.evaluate("!document.getElementById('memberMenu') && document.activeElement.classList.contains('roster-member')"), "Escape dismisses the action menu and restores focus");
+	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); document.getElementById('kickMemberOption').click(); true");
+	check(await pageA.evaluate("document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Bob')"), "choosing Kick from session opens confirmation for the selected participant");
 	await pageA.evaluate("document.querySelector('#kickDialog .btn').click(); true");
 	check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Connected'"), "cancel leaves the participant connected");
-	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); document.getElementById('confirmKick').click(); true");
+	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); document.getElementById('kickMemberOption').click(); document.getElementById('confirmKick').click(); true");
 	await pageB.waitFor("document.getElementById('statusText').textContent === 'Removed from room' && window.testCapture.getTracks().every(t=>t.readyState==='ended')", "kick stops the sharer's session and tracks");
-	await pageA.waitFor("document.querySelectorAll('#stage .tile').length === 0 && document.querySelectorAll('#rosterList li').length === 1", "kick removes stale streams and roster entries");
+	for (const page of [pageA, pageC]) await page.waitFor("document.querySelectorAll('#stage .tile').length === 0 && document.querySelectorAll('#rosterList li').length === 2", "kick removes the member and stream for every observer");
 	await sleep(1500);
-	check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Removed from room' && document.getElementById('shareBtn').disabled && !!document.querySelector('.session-removed')"), "kicked participant stays disconnected with sharing disabled and a persistent notice");
-	check(await pageA.evaluate("document.querySelectorAll('#rosterList li').length === 1"), "kick suppresses automatic rejoining");
+	check(await pageB.evaluate("document.getElementById('gate').hidden === false && document.getElementById('app').hidden && document.getElementById('nameInput').value === '' && !localStorage.getItem('screenroom.name') && !document.querySelector('#gateForm button').disabled"), "kicked participant logs out to the name gate and must explicitly join again");
+	check(await pageA.evaluate("document.querySelectorAll('#rosterList li').length === 2"), "kick suppresses automatic rejoining");
+	await join(pageB, "Bob");
+	for (const page of [pageA, pageB, pageC]) await page.waitFor("document.querySelectorAll('#rosterList li').length === 3", "explicit join restores membership for everyone");
+	await pageB.evaluate("document.getElementById('shareBtn').click(); true");
+	await pageC.waitFor("document.querySelector('#stage video')?.videoWidth > 0", "rejoined user can share again");
+	await pageB.evaluate("document.getElementById('shareBtn').click(); true");
+	await pageC.waitFor("document.querySelectorAll('#stage .tile').length === 0", "rejoined user stops sharing without duplicate handlers");
+	check(true, "explicit rejoin supports a fresh sharing session without reloading");
+	await pageB.evaluate("navigator.mediaDevices.getDisplayMedia=()=>new Promise(resolve=>window.resolvePendingCapture=resolve); document.getElementById('shareBtn').click(); true");
+	await pageB.waitFor("!!window.resolvePendingCapture", "pending screen picker");
+	await pageA.evaluate("[...document.querySelectorAll('.roster-member')].find(b=>b.textContent.includes('Bob')).click(); document.getElementById('kickMemberOption').click(); document.getElementById('confirmKick').click(); true");
+	await pageB.waitFor("document.getElementById('app').hidden", "logout while capture picker is pending");
+	await pageB.evaluate("window.testCapture=document.createElement('canvas').captureStream(10); resolvePendingCapture(testCapture); true");
+	await pageB.waitFor("testCapture.getTracks().every(t=>t.readyState==='ended') && !document.querySelector('#gateForm button').disabled", "late capture is disposed before rejoin is enabled");
+	check(true, "a capture resolving after kick cannot restart the removed stream");
 	clearTimeout(overall);
 
 	if (failures.length) {
@@ -421,7 +445,7 @@ try {
 		process.exit(1);
 	}
 
-	console.log("\nPASS — the full user flow works in two real browsers.");
+	console.log("\nPASS — sharing, room-wide removal and explicit rejoin work in three real browsers.");
 	cleanup();
 	process.exit(0);
 } catch (err) {

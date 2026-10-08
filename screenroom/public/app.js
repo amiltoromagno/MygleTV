@@ -1,5 +1,6 @@
 import { DEFAULT_ROOM } from "./config.js";
-import { connectSignaling } from "./signaling.js";
+// Keep the kick/session API compatible when an older module is cached.
+import { connectSignaling } from "./signaling.js?v=room-kick-2";
 import { Peer } from "./peers.js";
 import { addStreamControls } from "./stream-controls.js";
 import { setupWindowsWindow } from "./windows-window.js";
@@ -358,14 +359,55 @@ function confirmKick(id) {
 	kick.id = "confirmKick";
 	kick.className = "btn btn-danger";
 	kick.textContent = "Kick from session";
+	const feedback = document.createElement("p");
+	feedback.setAttribute("role", "status");
+	feedback.hidden = true;
+	let pending = false;
+	let timer;
+	const fail = (text) => {
+		clearTimeout(timer);
+		pending = false;
+		kick.disabled = false;
+		kick.textContent = "Kick from session";
+		feedback.hidden = false;
+		feedback.textContent = text;
+	};
+	const finish = () => { clearTimeout(timer); dialog.close(); };
+	const request = {
+		id,
+		complete: finish,
+		fail: (text) => { if (pending) fail(text); },
+	};
 	kick.addEventListener("click", () => {
-		if (!state.info.has(id)) toast("That participant has already left.");
-		else if (!state.signaling.kick(id)) toast("Not connected. Try again when the connection returns.");
-		dialog.close();
+		if (pending) return;
+		if (!state.info.has(id)) { finish(); toast("That participant has already left."); return; }
+		try {
+			if (typeof state.signaling?.kick !== "function") {
+				fail("This page is out of date. Reload it and try again.");
+				return;
+			}
+			pending = true;
+			if (!state.signaling.kick(id)) {
+				fail("Not connected. Try again when the connection returns.");
+				return;
+			}
+			kick.disabled = true;
+			kick.textContent = "Removing…";
+			feedback.hidden = false;
+			feedback.textContent = "Waiting for the room to confirm removal…";
+			timer = setTimeout(() => fail("The room did not confirm removal. Check your connection and try again."), 8000);
+		} catch {
+			fail("Could not send the removal request. Reload the page and try again.");
+		}
 	});
-	dialog.addEventListener("close", () => dialog.remove(), { once: true });
+	dialog.addEventListener("close", () => {
+		clearTimeout(timer);
+		if (kickRequest === request) kickRequest = null;
+		dialog.remove();
+	}, { once: true });
+	kickRequest = request;
 	actions.append(cancel, kick);
-	dialog.append(title, message, actions);
+	dialog.append(title, message, feedback, actions);
 	document.body.append(dialog);
 	dialog.showModal();
 }
@@ -759,6 +801,8 @@ async function copyInviteLink() {
 // Signaling handlers
 // ---------------------------------------------------------------------------
 
+let kickRequest = null;
+
 const handlers = {
 	onStatus: setStatus,
 	onKicked() {
@@ -774,7 +818,8 @@ const handlers = {
 		}
 		renderRoster();
 	},
-	onKickConfirmed() {
+	onKickConfirmed(id) {
+		if (kickRequest?.id === id) kickRequest.complete();
 		toast("Participant removed from the room for everyone.");
 	},
 
@@ -792,6 +837,7 @@ const handlers = {
 	},
 
 	onPeerLeave(id) {
+		if (kickRequest?.id === id) kickRequest.complete();
 		removePeer(id);
 		renderRoster();
 	},
@@ -816,10 +862,12 @@ const handlers = {
 	},
 
 	onDropped() {
+		kickRequest?.fail("Connection lost. Try again when the connection returns.");
 		resetPeers();
 	},
 
 	onError(message) {
+		kickRequest?.fail(message);
 		toast(message);
 	},
 };

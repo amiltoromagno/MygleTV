@@ -19,8 +19,8 @@ import WebSocket from "ws";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SERVER_PORT = 8455;
-const ROOM = "e2e-room";
-const APP_URL = `http://127.0.0.1:${SERVER_PORT}/?room=${ROOM}`;
+const ROOM = `e2e-${Date.now()}`;
+const APP_URL = `${process.env.APP_ORIGIN || `http://127.0.0.1:${SERVER_PORT}`}/?room=${ROOM}`;
 const DEADLINE_MS = 60_000;
 
 const CHROME_CANDIDATES = [
@@ -102,6 +102,18 @@ class Page {
 			await sleep(200);
 		}
 		throw new Error(`timed out waiting for: ${label}`);
+	}
+
+	async click(selector) {
+		const point = await this.evaluate(`(() => {
+			const element = document.querySelector(${JSON.stringify(selector)});
+			element.scrollIntoView({ block: 'center' });
+			const rect = element.getBoundingClientRect();
+			return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+		})()`);
+		await this.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...point });
+		await this.send("Input.dispatchMouseEvent", { type: "mousePressed", ...point, button: "left", clickCount: 1 });
+		await this.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, button: "left", clickCount: 1 });
 	}
 }
 
@@ -416,9 +428,23 @@ try {
 	check(await pageA.evaluate("document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Bob')"), "choosing Kick from session opens confirmation for the selected participant");
 	await pageA.evaluate("document.querySelector('#kickDialog .btn').click(); true");
 	check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Connected'"), "cancel leaves the participant connected");
-	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); document.getElementById('kickMemberOption').click(); document.getElementById('confirmKick').click(); true");
+	await pageA.click("#rosterList .roster-member");
+	await pageA.click("#kickMemberOption");
+	if (!process.env.APP_ORIGIN) {
+		await pageA.evaluate(`window.originalSend = WebSocket.prototype.send;
+			WebSocket.prototype.send = function(data) {
+				if (JSON.parse(data).t === 'kick') throw new Error('Simulated send failure');
+				return originalSend.call(this, data);
+			}; true`);
+		await pageA.click("#confirmKick");
+		check(await pageA.evaluate("document.getElementById('kickDialog').open && !document.getElementById('confirmKick').disabled && document.querySelector('#kickDialog [role=status]').textContent.includes('Not connected')"), "a failed kick stays open with an actionable error and allows retry");
+		check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Connected'"), "a failed request does not remove the participant locally");
+		await pageA.evaluate("WebSocket.prototype.send = originalSend; true");
+	}
+	await pageA.click("#confirmKick");
 	await pageB.waitFor("document.getElementById('statusText').textContent === 'Removed from room' && window.testCapture.getTracks().every(t=>t.readyState==='ended')", "kick stops the sharer's session and tracks");
 	for (const page of [pageA, pageC]) await page.waitFor("document.querySelectorAll('#stage .tile').length === 0 && document.querySelectorAll('#rosterList li').length === 2", "kick removes the member and stream for every observer");
+	await pageA.waitFor("!document.getElementById('kickDialog')", "successful server removal closes the confirmation");
 	await sleep(1500);
 	check(await pageB.evaluate("document.getElementById('gate').hidden === false && document.getElementById('app').hidden && document.getElementById('nameInput').value === '' && !localStorage.getItem('screenroom.name') && !document.querySelector('#gateForm button').disabled"), "kicked participant logs out to the name gate and must explicitly join again");
 	check(await pageA.evaluate("document.querySelectorAll('#rosterList li').length === 2"), "kick suppresses automatic rejoining");
@@ -436,6 +462,29 @@ try {
 	await pageB.evaluate("window.testCapture=document.createElement('canvas').captureStream(10); resolvePendingCapture(testCapture); true");
 	await pageB.waitFor("testCapture.getTracks().every(t=>t.readyState==='ended') && !document.querySelector('#gateForm button').disabled", "late capture is disposed before rejoin is enabled");
 	check(true, "a capture resolving after kick cannot restart the removed stream");
+	if (!process.env.APP_ORIGIN) {
+		// Reproduce a page loading a legacy signaling module without the kick API.
+		const legacy = fs.readFileSync(path.join(ROOT, "public/signaling.js"), "utf8").replace("kick(to) {", "legacyKick(to) {");
+		const intercept = (data) => {
+			const event = JSON.parse(data.toString());
+			if (event.method === "Fetch.requestPaused") void pageA.send("Fetch.fulfillRequest", {
+				requestId: event.params.requestId, responseCode: 200,
+				responseHeaders: [{ name: "Content-Type", value: "text/javascript" }],
+				body: Buffer.from(legacy).toString("base64"),
+			});
+		};
+		pageA.ws.on("message", intercept);
+		await pageA.send("Fetch.enable", { patterns: [{ urlPattern: "*signaling.js*" }] });
+		await pageA.send("Page.navigate", { url: APP_URL });
+		await join(pageA, "Alice");
+		await pageA.waitFor("document.querySelector('#rosterList .roster-member')", "legacy module still joins the room");
+		await pageA.click("#rosterList .roster-member");
+		await pageA.click("#kickMemberOption");
+		await pageA.click("#confirmKick");
+		check(await pageA.evaluate("document.getElementById('kickDialog').open && document.querySelector('#kickDialog [role=status]').textContent.includes('out of date') && !document.getElementById('confirmKick').disabled"), "a legacy module shows reload instructions instead of leaving the kick button unresponsive");
+		await pageA.send("Fetch.disable");
+		pageA.ws.off("message", intercept);
+	}
 	clearTimeout(overall);
 
 	if (failures.length) {

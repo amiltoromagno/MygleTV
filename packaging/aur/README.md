@@ -1,23 +1,23 @@
 # MygleTV on the AUR
 
-`mygletv-bin` repackages the released Linux application with Arch's `electron44`
+`mygletv` builds from the tagged source archive with Arch's `electron44`
 runtime. It installs `mygletv` in the terminal and adds an application-menu entry.
-The application code is taken directly from the release, without changes.
+The application code is taken directly from the source tag, without changes.
 
 ## Install after AUR publication
 
 ```sh
-yay -S mygletv-bin
+yay -S mygletv
 # or
-paru -S mygletv-bin
+paru -S mygletv
 ```
 
 Without an AUR helper:
 
 ```sh
 sudo pacman -S --needed base-devel git
-git clone https://aur.archlinux.org/mygletv-bin.git
-cd mygletv-bin
+git clone https://aur.archlinux.org/mygletv.git
+cd mygletv
 makepkg -si
 ```
 
@@ -27,7 +27,7 @@ publication, the recipe can be installed directly from this repository:
 ```sh
 sudo pacman -S --needed base-devel git
 git clone https://github.com/amiltoromagno/MygleTV.git
-cd MygleTV/packaging/aur/mygletv-bin
+cd MygleTV/packaging/aur/mygletv
 makepkg -si
 ```
 
@@ -42,11 +42,11 @@ Create an account at https://aur.archlinux.org/register and add a public SSH key
 to the account settings. The private key stays on the publisher's computer.
 
 Clone the package repository over SSH, copy only `PKGBUILD`, `.SRCINFO`,
-`mygletv` and `mygletv.desktop` from `mygletv-bin/`, then commit and push:
+`mygletv` and `mygletv.desktop` from `mygletv/`, then commit and push:
 
 ```sh
-git -c init.defaultBranch=master clone ssh://aur@aur.archlinux.org/mygletv-bin.git
-cd mygletv-bin
+git -c init.defaultBranch=master clone ssh://aur@aur.archlinux.org/mygletv.git
+cd mygletv
 # Copy the four recipe files here.
 makepkg --printsrcinfo > .SRCINFO
 git add PKGBUILD .SRCINFO mygletv mygletv.desktop

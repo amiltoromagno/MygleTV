@@ -16,19 +16,19 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install packaging and runtime tools
-        run: pacman -Syu --noconfirm git nodejs electron44 libpulse namcap xorg-server-xvfb desktop-file-utils
+        run: pacman -Syu --noconfirm git nodejs npm electron44 libpulse namcap xorg-server-xvfb desktop-file-utils
       - uses: actions/checkout@v4
       - name: Build as an unprivileged user
         run: |
           useradd -m builder
-          chown -R builder:builder packaging/aur/mygletv-bin
-          cd packaging/aur/mygletv-bin
+          chown -R builder:builder packaging/aur/mygletv
+          cd packaging/aur/mygletv
           runuser -u builder -- makepkg --cleanbuild --noconfirm
           runuser -u builder -- makepkg --printsrcinfo > .SRCINFO.generated
           diff -u .SRCINFO .SRCINFO.generated
           desktop-file-validate mygletv.desktop
-          namcap PKGBUILD mygletv-bin-*.pkg.tar.zst
-          pacman -U --noconfirm mygletv-bin-*.pkg.tar.zst
+          namcap PKGBUILD mygletv-*.pkg.tar.zst
+          pacman -U --noconfirm mygletv-*.pkg.tar.zst
       - name: Check installed launcher and packaged frontend
         run: |
           set +e
@@ -38,10 +38,10 @@ jobs:
           cat /tmp/mygletv-smoke.log
           test "$STATUS" = 124
           grep -F '[mygletv] this window is on http://127.0.0.1:' /tmp/mygletv-smoke.log
-          test -f /usr/lib/mygletv/resources/app.asar
-          test -f /usr/lib/mygletv/resources/screenroom/public/app.js
+          test -f /usr/lib/mygletv/app/main.js
+          test -f /usr/lib/mygletv/screenroom/public/app.js
       - uses: actions/upload-artifact@v4
         with:
           name: mygletv-arch-package
           if-no-files-found: error
-          path: packaging/aur/mygletv-bin/*.pkg.tar.zst
+          path: packaging/aur/mygletv/*.pkg.tar.zst

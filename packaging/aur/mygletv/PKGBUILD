@@ -1,5 +1,5 @@
-# Maintainer: MygleTV contributors
-pkgname=mygletv-bin
+# Maintainer: Ruancbardt <ruan.c.bardt@gmail.com>
+pkgname=mygletv
 pkgver=0.1.1
 pkgrel=1
 pkgdesc='Private screen sharing rooms with per-application audio'
@@ -8,32 +8,40 @@ url='https://github.com/amiltoromagno/MygleTV'
 # The upstream repository does not currently declare an application license.
 license=('unknown')
 depends=('electron44' 'libpulse')
+makedepends=('npm')
 optdepends=('pipewire-pulse: audio capture with PipeWire'
             'pulseaudio: audio capture with PulseAudio'
             'xdg-desktop-portal: screen capture on Wayland')
-provides=('mygletv')
-conflicts=('mygletv')
 options=('!strip')
-source=("MygleTV-${pkgver}-amd64.deb::${url}/releases/download/v${pkgver}/MygleTV-${pkgver}-amd64.deb"
+source=("mygletv-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz"
         'mygletv'
         'mygletv.desktop')
-noextract=("MygleTV-${pkgver}-amd64.deb")
-sha256sums=('f7c16cc5d240d069d0b2957b718cbf01b02a3870a1e2f5b6426f87ef2767856b'
-            '4ee468fe5d0afa917dffcd148ed3d410294f12375470ef3510d5e7b05250d116'
+sha256sums=('9414a6a45cde8206240dbd10d356e6903a8d0866b683f80cb4ed377bc701da43'
+            '69c2afabc1bbaffbb2d9d179e9573fc84094c6bd4361af1882fb212a3eb40791'
             '54993675c41195276f18ff5829e754672fb64c69c4d1b5c6a535d53b0db7137f')
 
-prepare() {
-  bsdtar -xf "${srcdir}/MygleTV-${pkgver}-amd64.deb" -C "${srcdir}"
-  bsdtar -xf "${srcdir}/data.tar.xz" -C "${srcdir}"
+build() {
+  export npm_config_cache="${srcdir}/npm-cache"
+  cd "${srcdir}/MygleTV-${pkgver}/screenroom"
+  npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
+  cd "${srcdir}/MygleTV-${pkgver}/screenroom-desktop"
+  npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
 }
 
 package() {
-  # Use Arch's Electron runtime; retain the released app and server layout.
-  install -d "${pkgdir}/usr/lib/mygletv"
-  cp -a "${srcdir}/opt/MygleTV/resources" "${pkgdir}/usr/lib/mygletv/"
-  rm -f "${pkgdir}/usr/lib/mygletv/resources/apparmor-profile"
+  local project="${srcdir}/MygleTV-${pkgver}"
+  local app="${pkgdir}/usr/lib/mygletv/app"
+  local web="${pkgdir}/usr/lib/mygletv/screenroom"
+  install -d "${app}" "${web}"
+  install -m644 "${project}/screenroom-desktop/"*.js "${project}/screenroom-desktop/"*.cjs \
+    "${project}/screenroom-desktop/package.json" "${app}/"
+  cp -a "${project}/screenroom-desktop/audio" "${project}/screenroom-desktop/packaging" \
+    "${project}/screenroom-desktop/node_modules" "${app}/"
+  install -m644 "${project}/screenroom/server.js" "${project}/screenroom/package.json" "${web}/"
+  cp -a "${project}/screenroom/public" "${project}/screenroom/node_modules" "${web}/"
+  find "${pkgdir}" -name .package-lock.json -delete
   install -Dm755 "${srcdir}/mygletv" "${pkgdir}/usr/bin/mygletv"
   install -Dm644 "${srcdir}/mygletv.desktop" "${pkgdir}/usr/share/applications/mygletv.desktop"
-  install -Dm644 "${srcdir}/usr/share/icons/hicolor/512x512/apps/mygletv.png" \
+  install -Dm644 "${project}/screenroom-desktop/packaging/mygletv-512.png" \
     "${pkgdir}/usr/share/icons/hicolor/512x512/apps/mygletv.png"
 }

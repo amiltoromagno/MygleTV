@@ -1,0 +1,47 @@
+appId: com.mygletv.desktop
+productName: MygleTV
+directories:
+  output: dist/linux
+files:
+  - '*.js'
+  - '*.cjs'
+  - audio/**
+  - packaging/**
+  - package.json
+  - '!node_modules/loopback-capture/**'
+extraResources:
+  - from: ../screenroom
+    to: screenroom
+    filter:
+      - server.js
+      - package.json
+      - public/**
+  - from: ../screenroom/node_modules/ws
+    to: screenroom/node_modules/ws
+    filter:
+      - '**/*'
+npmRebuild: false
+linux:
+  executableName: mygletv
+  category: Network
+  icon: packaging/mygletv-512.png
+  maintainer: MygleTV contributors <noreply@github.com>
+  synopsis: Private screen sharing rooms
+  description: Share your screen and application audio with friends using MygleTV.
+  artifactName: MygleTV-${version}-${arch}.${ext}
+  target:
+    - AppImage
+    - deb
+deb:
+  depends:
+    - libgtk-3-0
+    - libnss3
+    - libasound2
+    - libgbm1
+    - libxss1
+    - libxtst6
+    - libnotify4
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+    - pulseaudio-utils

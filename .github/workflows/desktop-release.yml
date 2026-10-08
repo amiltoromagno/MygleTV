@@ -1,0 +1,94 @@
+name: Desktop release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-22.04
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            screenroom/package-lock.json
+            screenroom-desktop/package-lock.json
+      - name: Verify release version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./screenroom-desktop/package.json').version")
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+      - run: npm ci
+        working-directory: screenroom
+      - run: npm ci
+        working-directory: screenroom-desktop
+      - run: npm test
+        working-directory: screenroom
+      - run: npm test
+        working-directory: screenroom-desktop
+      - name: Linux build and runtime dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libxss1 libxtst6 libnotify4 libatspi2.0-0 libsecret-1-0 pulseaudio-utils xvfb
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        run: npm run dist:windows -- --publish never
+        working-directory: screenroom-desktop
+      - name: Build Linux packages
+        if: matrix.platform == 'linux'
+        run: npx electron-builder --config electron-builder.linux.yml --linux --x64 --publish never
+        working-directory: screenroom-desktop
+      - name: Smoke test packaged Linux app
+        if: matrix.platform == 'linux'
+        working-directory: screenroom-desktop
+        run: |
+          set +e
+          xvfb-run -a timeout 15s dist/linux/linux-unpacked/mygletv --no-sandbox --url= > dist/linux/smoke.log 2>&1
+          STATUS=$?
+          set -e
+          cat dist/linux/smoke.log
+          test "$STATUS" = 124
+          grep -F '[mygletv] this window is on http://127.0.0.1:' dist/linux/smoke.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            screenroom-desktop/dist/${{ matrix.platform }}/*.exe
+            screenroom-desktop/dist/${{ matrix.platform }}/*.AppImage
+            screenroom-desktop/dist/${{ matrix.platform }}/*.deb
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create checksums and publish installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          sha256sum *.exe *.AppImage *.deb > SHA256SUMS.txt
+          cd ..
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "MygleTV $GITHUB_REF_NAME" --notes-file screenroom-desktop/RELEASES.md

@@ -4,6 +4,7 @@ directories:
   output: dist/windows
 files:
   - main.js
+  - app-url.js
   - shell.js
   - windows-shell.js
   - windows-relay-proxy.js
@@ -12,6 +13,7 @@ files:
   - preload.cjs
   - windows-preload.cjs
   - audio/**
+  - packaging/**
   - package.json
   - '!node_modules/loopback-capture/prebuilds/linux-x64/**'
 asarUnpack:

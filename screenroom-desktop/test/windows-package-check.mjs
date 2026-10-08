@@ -71,7 +71,7 @@ try { page = (await (await fetch("http://127.0.0.1:9377/json")).json()).find((p)
 		assert.equal(await evaluate("typeof screenroomNative.windowControl"), "function");
 		assert.equal(await evaluate("!!document.querySelector('.windows-caption [data-window-action=close]')"), true);
 		console.log("PASS borderless Windows caption and window control bridge are packaged");
-		for (const module of ["windows-quality.js", "windows-peers.js", "share-quality.js"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
+		for (const module of ["quality-controls.js", "share-quality.js", "peers.js"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
 		assert.equal(await evaluate("typeof screenroomNative.getQuality"), "function");
 		assert.equal(await evaluate("typeof screenroomNative.saveQuality"), "function");
 		if (!cloudflare) {

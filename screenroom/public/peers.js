@@ -1,4 +1,5 @@
-import { ICE_SERVERS, SHARE_MAX_BITRATE } from "./config.js";
+import { ICE_SERVERS } from "./config.js";
+import { normalizeQuality } from "./share-quality.js";
 
 // A candidate can only be applied once a remote description exists. Anything
 // arriving before that is queued; this bounds the queue so a misbehaving peer
@@ -17,7 +18,7 @@ const MAX_PENDING_CANDIDATES = 200;
 // stays in place as the safety net for later renegotiation.
 
 export class Peer {
-	constructor({ id, polite, send, onStream, onStateChange }) {
+	constructor({ id, polite, send, onStream, onStateChange, quality }) {
 		this.id = id;
 		this.polite = polite;
 		this.send = send;
@@ -54,6 +55,16 @@ export class Peer {
 		this.audioSender = pc.addTransceiver("audio", {
 			direction: "sendrecv",
 		}).sender;
+
+		// Encoder ceilings are per peer, because each viewer gets their own
+		// stream. Serialised through parameterUpdates: setParameters() is async
+		// and overlapping calls can interleave and lose the last write.
+		this.quality = normalizeQuality(quality);
+		this.parameterUpdates = Promise.resolve();
+		pc.addEventListener("connectionstatechange", () => {
+			// Parameters only take effect once the connection is negotiated.
+			if (pc.connectionState === "connected") this.applyScreenParameters().catch(() => {});
+		});
 
 		pc.onnegotiationneeded = async () => {
 			// Wait for the offer instead of racing it. Once a remote description
@@ -134,6 +145,9 @@ export class Peer {
 				}
 
 				await this.drainPendingCandidates();
+				// Sender parameters cannot be set before the connection is
+				// negotiated, so this is the first point they will stick.
+				await this.applyScreenParameters().catch(() => {});
 			} else if (data.candidate) {
 				// Candidates routinely win the race against the description that
 				// gives them meaning. addIceCandidate() throws in that window and a
@@ -187,20 +201,36 @@ export class Peer {
 		}
 	}
 
-	// Screen content is text, not motion: ask the encoder to protect
-	// resolution instead of frame rate, and give it room to be sharp.
-	async applyScreenParameters() {
-		try {
+	// Screen content is text, not motion: at 30 FPS ask the encoder to protect
+	// resolution instead of frame rate. Above that the source is high-motion
+	// (a game or a film), where holding frames matters more, so the preference
+	// is balanced instead.
+	//
+	// These are ceilings, not guarantees: capture, CPU and the network can all
+	// land below them, and every viewer gets an independent stream.
+	applyScreenParameters() {
+		const update = this.parameterUpdates.then(async () => {
+			if (this.closed) return;
 			const params = this.videoSender.getParameters();
+			// No encodings until the m-line is negotiated; retried on connect.
 			if (!params.encodings || params.encodings.length === 0) return;
-			params.encodings[0].maxBitrate = SHARE_MAX_BITRATE;
-			params.encodings[0].priority = "high";
-			params.degradationPreference = "maintain-resolution";
+			for (const encoding of params.encodings) {
+				encoding.maxBitrate = this.quality.bitrate * 1_000_000;
+				encoding.maxFramerate = this.quality.fps;
+				encoding.priority = "high";
+			}
+			params.degradationPreference =
+				this.quality.fps === 30 ? "maintain-resolution" : "balanced";
 			await this.videoSender.setParameters(params);
-		} catch {
-			// Not every browser exposes these; it is a quality tweak, not a
-			// correctness requirement, so failure is not worth reporting.
-		}
+		});
+		this.parameterUpdates = update.catch(() => {});
+		return update;
+	}
+
+	/** Change the ceiling for this view. Safe to call during a share. */
+	async setQuality(quality) {
+		this.quality = normalizeQuality(quality);
+		await this.applyScreenParameters();
 	}
 
 	close() {

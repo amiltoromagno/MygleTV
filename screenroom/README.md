@@ -192,8 +192,16 @@ export const ICE_SERVERS = [
 The relay sees only encrypted DTLS traffic, but it does carry your bandwidth,
 so keep it off the same box as the signaling server if you can.
 
-Tuning knobs also live in `config.js`: `SHARE_MAX_BITRATE` (raise it to watch
-video together, lower it on weak uplinks) and `DISPLAY_CONSTRAINTS`.
+Stream quality is no longer a constant to edit. The **Quality** button in the app
+sets the video bitrate ceiling, frame rate and resolution, and the choice is
+remembered per client — in `localStorage` for browsers and the Linux client, and
+in the Windows user data directory for the Windows shell, whose frontend origin
+changes on every launch. `share-quality.js` holds the defaults and the validation;
+`quality-controls.js` is the dialog.
+
+The defaults (4 Mbps, 30 FPS, original resolution) match what the old
+`SHARE_MAX_BITRATE` and `DISPLAY_CONSTRAINTS` constants hardcoded, so nothing
+changes unless someone opens the dialog.
 
 ## How it works
 

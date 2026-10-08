@@ -1,11 +1,10 @@
-import { DEFAULT_ROOM, DISPLAY_CONSTRAINTS } from "./config.js";
+import { DEFAULT_ROOM } from "./config.js";
 import { connectSignaling } from "./signaling.js";
 import { Peer } from "./peers.js";
 import { addStreamControls } from "./stream-controls.js";
 import { setupWindowsWindow } from "./windows-window.js";
-import { WindowsPeer } from "./windows-peers.js";
 import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
-import { setupWindowsQuality } from "./windows-quality.js";
+import { setupQualityControls } from "./quality-controls.js";
 import {
 	captureNativeAudio,
 	chooseNativeScreen,
@@ -327,7 +326,7 @@ function makePeer(id, name, sharing) {
 	const existing = state.peers.get(id);
 	if (existing) return existing;
 
-	const peer = new (isWindowsNative ? WindowsPeer : Peer)({
+	const peer = new Peer({
 		quality: state.quality,
 		id,
 		// Both ends must agree who yields. They do: each knows both IDs.
@@ -537,7 +536,15 @@ async function startShare() {
 	}
 
 	// When the audio comes from somewhere else, don't also grab the display's.
-	const displayConstraints = isWindowsNative ? { video: videoConstraints(state.quality), audio: false } : DISPLAY_CONSTRAINTS;
+	// Every client honours the same quality profile. The defaults match what this
+	// used to hardcode (4 Mbps, 30 FPS, native resolution), so nothing changes for
+	// anyone who never opens the dialog.
+	const displayConstraints = {
+		video: videoConstraints(state.quality),
+		// A desktop shell captures audio separately, so also grabbing the
+		// display's would duplicate it. A browser has no other way to get audio.
+		audio: !hasNative,
+	};
 	const constraints =
 		choice === "display"
 			? displayConstraints
@@ -607,7 +614,7 @@ async function startShare() {
 
 	// Tell the encoder this is text/UI, not motion. This is the single biggest
 	// factor in whether shared text is readable.
-	if (videoTrack && "contentHint" in videoTrack) videoTrack.contentHint = isWindowsNative && state.quality.fps > 30 ? "motion" : "detail";
+	if (videoTrack && "contentHint" in videoTrack) videoTrack.contentHint = state.quality.fps > 30 ? "motion" : "detail";
 
 	// The browser's own "Stop sharing" bar ends the track behind our back.
 	if (videoTrack) videoTrack.addEventListener("ended", () => stopShare());
@@ -775,10 +782,9 @@ function enterRoom(name) {
 	state.signaling = connectSignaling({ room: ROOM, name, handlers });
 
 	$("shareBtn").addEventListener("click", () => {
-		if (!isWindowsNative) {
-			if (state.sharing) stopShare(); else startShare();
-			return;
-		}
+		// One path for every client. Without the guard a second click opens a
+		// second screen picker, because state.sharing stays false until the first
+		// one resolves -- and on a desktop shell the picker can be open for a while.
 		if (state.sharePending) return;
 		state.sharePending = true;
 		$("shareBtn").disabled = true;
@@ -790,35 +796,37 @@ function enterRoom(name) {
 
 	// Only does anything inside the desktop shell.
 	setupAudioPicker();
-	if (isWindowsNative) {
-		$("shareBtn").disabled = true;
-		setupWindowsQuality({
-			getQuality: () => state.quality,
-			getTrack: () => state.localStream?.getVideoTracks()[0],
-			isBusy: () => state.sharePending,
-			toast,
-			applyQuality: async (quality) => {
-				if (state.sharePending) throw new Error("Screen sharing is busy.");
-				const previous = state.quality;
-				const track = state.localStream?.getVideoTracks()[0];
-				state.sharePending = true;
-				$("shareBtn").disabled = true;
-				try {
-					if (track) await track.applyConstraints(videoConstraints(quality));
-					state.quality = quality;
-					await Promise.all([...state.peers.values()].map((peer) => peer.setQuality(quality)));
-					if (track) track.contentHint = quality.fps > 30 ? "motion" : "detail";
-				} catch (err) {
-					state.quality = previous;
-					await Promise.allSettled([
-						...(track ? [track.applyConstraints(videoConstraints(previous))] : []),
-						...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
-					]);
-					throw err;
-				} finally { state.sharePending = false; $("shareBtn").disabled = state.kicked; }
-			},
-		}).finally(() => { $("shareBtn").disabled = state.kicked; });
-	}
+	// Hold the share button until the saved profile has been applied, so a share
+	// never starts at one quality and then changes underneath the viewers.
+	$("shareBtn").disabled = true;
+	setupQualityControls({
+		getQuality: () => state.quality,
+		getTrack: () => state.localStream?.getVideoTracks()[0],
+		isBusy: () => state.sharePending,
+		toast,
+		applyQuality: async (quality) => {
+			if (state.sharePending) throw new Error("Screen sharing is busy.");
+			const previous = state.quality;
+			const track = state.localStream?.getVideoTracks()[0];
+			state.sharePending = true;
+			$("shareBtn").disabled = true;
+			try {
+				if (track) await track.applyConstraints(videoConstraints(quality));
+				state.quality = quality;
+				await Promise.all([...state.peers.values()].map((peer) => peer.setQuality(quality)));
+				if (track) track.contentHint = quality.fps > 30 ? "motion" : "detail";
+			} catch (err) {
+				// Put the old profile back rather than leaving the capture and the
+				// encoder ceilings disagreeing about what was requested.
+				state.quality = previous;
+				await Promise.allSettled([
+					...(track ? [track.applyConstraints(videoConstraints(previous))] : []),
+					...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
+				]);
+				throw err;
+			} finally { state.sharePending = false; $("shareBtn").disabled = state.kicked; }
+		},
+	}).finally(() => { $("shareBtn").disabled = state.kicked; });
 
 	document.addEventListener("keydown", (event) => {
 		if (event.key === "Escape" && state.focused && !document.fullscreenElement && !document.body.classList.contains("in-app-fullscreen")) {

@@ -240,6 +240,42 @@ try {
 		"the tile has a mute button",
 	);
 
+	// Stream quality: the remaining Windows-only feature. Linux has no native
+	// bridge method for it, so the preference has to land in localStorage.
+	await waitFor("!!document.getElementById('qualityBtn')", "the quality button");
+	check(true, "the desktop client offers stream quality");
+
+	await evaluate("document.getElementById('qualityBtn').click(); true");
+	check(
+		await evaluate("document.getElementById('qualityDialog').open === true"),
+		"the quality dialog opens",
+	);
+
+	await evaluate(`
+		document.getElementById('qualityBitrate').value = "12";
+		document.getElementById('qualityFps').value = "60";
+		document.getElementById('qualityResolution').value = "1080p";
+		document.getElementById('qualityForm').requestSubmit();
+		true;
+	`);
+	await sleep(800);
+
+	const stored = await evaluate("localStorage.getItem('mygletv.quality')");
+	let parsed = null;
+	try {
+		parsed = JSON.parse(stored);
+	} catch {
+		/* left null, reported below */
+	}
+	check(
+		parsed && parsed.bitrate === 12 && parsed.fps === 60 && parsed.resolution === "1080p",
+		`the chosen profile persists in localStorage (${stored})`,
+	);
+
+	// And it is actually in force, not merely written down.
+	const applied = await evaluate("document.getElementById('qualityBitrate').value");
+	check(applied === "12", `the dialog reopens on the saved profile (bitrate ${applied})`);
+
 	peer.close();
 } catch (err) {
 	check(false, `unexpected failure: ${err.message}`);

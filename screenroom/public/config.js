@@ -22,15 +22,7 @@ export const ICE_SERVERS = [
 // Used when the URL has no ?room= or #room-name.
 export const DEFAULT_ROOM = "main";
 
-// What to ask getDisplayMedia for. Screen content is text-heavy, so we cap the
-// frame rate rather than the resolution: sharp beats smooth for reading.
-export const DISPLAY_CONSTRAINTS = {
-	video: {
-		frameRate: { ideal: 30, max: 30 },
-	},
-	audio: true,
-};
-
-// Ceiling for a single screen share, per viewer. Raise for high-motion video
-// (watching a film together), lower on weak uplinks.
-export const SHARE_MAX_BITRATE = 4_000_000;
+// What to ask getDisplayMedia for, and the bitrate ceiling per viewer, now come
+// from the shared quality profile in share-quality.js. Its defaults (4 Mbps,
+// 30 FPS, native resolution) match what used to be hardcoded here, so the fixed
+// constants were replaced rather than tuned.

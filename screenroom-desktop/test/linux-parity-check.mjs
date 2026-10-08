@@ -159,6 +159,17 @@ try {
 	// gate, this exact combination is what lost the controls.
 	await send("Page.addScriptToEvaluateOnNewDocument", {
 		source: `
+			// Count AudioContext constructions. Amplification above 100% routes
+			// playback through Web Audio, so one appearing proves the boost path is
+			// live rather than merely offered by the UI.
+			window.__audioContexts = 0;
+			const NativeAudioContext = window.AudioContext;
+			window.AudioContext = function (...args) {
+				window.__audioContexts++;
+				return new NativeAudioContext(...args);
+			};
+			window.AudioContext.prototype = NativeAudioContext.prototype;
+
 			window.screenroomNative = {
 				platform: "linux",
 				listApps: async () => ({ ok: true, apps: [] }),
@@ -239,6 +250,30 @@ try {
 		(await evaluate("document.querySelectorAll('#stage .tile .tile-mute').length")) >= 1,
 		"the tile has a mute button",
 	);
+
+	// Amplification above 100% is plain Web Audio, so the Linux client must offer
+	// it too. It was gated to browsers and the Windows shell for a while, which
+	// left this client -- the only one excluded -- with a slider stopping at 100%.
+	const max = await evaluate("document.querySelector('#stage .tile .tile-volume').max");
+	check(max === "300", `the volume slider reaches 300% (max is ${max})`);
+	check(
+		(await evaluate("document.querySelectorAll('#stage .tile .tile-volume-value').length")) >= 1,
+		"and displays the current level",
+	);
+
+	await evaluate(`
+		(() => {
+			const slider = document.querySelector('#stage .tile .tile-volume');
+			slider.value = "250";
+			slider.dispatchEvent(new Event("input", { bubbles: true }));
+		})();
+		true;
+	`);
+	await sleep(500);
+	const contexts = await evaluate("window.__audioContexts");
+	const level = await evaluate("document.querySelector('#stage .tile .tile-volume-value').textContent");
+	check(contexts > 0, `amplifying above 100% engages the Web Audio path (${contexts} context(s))`);
+	check(level === "250%", `and the readout follows the slider (${level})`);
 
 	// Stream quality: the remaining Windows-only feature. Linux has no native
 	// bridge method for it, so the preference has to land in localStorage.

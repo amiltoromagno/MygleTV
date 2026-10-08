@@ -1,4 +1,11 @@
-/** Playback controls shared by browser viewers and the Windows desktop app. */
+/**
+ * Playback controls shared by every client.
+ *
+ * Amplification above 100% needs the Web Audio path in stream-volume.js, which
+ * is plain Web Audio and works wherever the app runs. It was briefly limited to
+ * browsers and the Windows shell, which left the Linux desktop app -- the only
+ * client excluded -- with a slider that stopped at 100%.
+ */
 import { enterInAppFullscreen, exitInAppFullscreen } from "./windows-window.js";
 import { createStreamVolume } from "./stream-volume.js";
 export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
@@ -7,7 +14,8 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	volume.type = "range";
 	volume.className = "tile-volume";
 	volume.min = "0";
-	const canBoost = !isSelf && (!window.screenroomNative || window.screenroomNative.platform === "win32");
+	// Your own preview is never amplified; that would be a feedback loop.
+	const canBoost = !isSelf;
 	volume.max = canBoost ? "300" : "100";
 	volume.step = "1";
 	volume.disabled = isSelf;

@@ -375,6 +375,13 @@ body {
 	accent-color: var(--accent);
 	cursor: pointer;
 }
+.tile-volume-value {
+	min-width: 36px;
+	font-size: 11px;
+	text-align: right;
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+}
 
 .tile-fullscreen,
 .tile-fullscreen-exit {

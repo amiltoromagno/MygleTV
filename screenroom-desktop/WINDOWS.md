@@ -82,11 +82,20 @@ and balanced degradation. Linux and standalone browser settings are unchanged.
 ## Watching streams
 
 Windows and browser viewers keep the other streams as smaller tiles below a
-focused stream. Each received stream has an independent 0–100% volume slider
+focused stream. Windows and web received streams have an independent 0–300% volume slider
 and mute button; unmuting restores the previous volume. The local preview stays
 muted to avoid feedback. The full-screen button opens an individual stream;
 the **×** at the top right or **Esc** exits. Volume controls remain available
 in full screen. These playback controls do not change the shared audio track.
+
+100% is the original playback level; above 100% the viewer amplifies that stream
+locally. The percentage is shown beside the slider. Other viewers and the
+sharer's game volume are unaffected. Mute/unmute restores the chosen level,
+including 300%. Above 100%, a Web Audio gain node plays the received audio while
+the video's own audio is muted to prevent doubled playback. Returning to 100%
+or below restores native playback, and removing the tile releases the graph.
+If amplified audio distorts, reduce its volume. This change leaves Linux's
+existing 0–100% playback control intact.
 
 Windows also has **Full screen in app** on each stream. It fills the existing
 window without resizing it and hides the application UI, caption buttons and

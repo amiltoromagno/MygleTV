@@ -71,6 +71,16 @@ const measureScript = `(() => {
 	return {target:amplitude(440), other:amplitude(880)};
 })()`;
 
+const boostProbe = `(() => {
+	const original = AudioContext.prototype.createGain;
+	AudioContext.prototype.createGain = function() {
+		const gain = original.call(this), analyser = this.createAnalyser();
+		analyser.fftSize = 4096; gain.connect(analyser);
+		window.boostCheck = {ctx:this, analyser, gain}; return gain;
+	};
+})()`;
+const boostMeasure = measureScript.replace("window.audioCheck", "window.boostCheck");
+
 async function runCheck() {
 let code = 1;
 try {
@@ -143,11 +153,24 @@ try {
 	await waitFor(viewer, `(${measureScript}).target > 0.01`, "remote tone", 12000);
 	const levels = await evaluate(viewer, measureScript);
 	check(levels.target > 0.01 && levels.other < levels.target * 0.15, `selected application's audio arrives; other process excluded (${JSON.stringify(levels)})`);
+	await evaluate(viewer, boostProbe);
+	await evaluate(viewer, "{const slider=document.querySelector('.tile-volume'); slider.value='300'; slider.dispatchEvent(new Event('input'));} true");
+	await waitFor(viewer, `boostCheck.gain.gain.value > 2.9 && (${boostMeasure}).target > ${levels.target * 2.4}`, "viewer amplification triples the quiet audio");
+	check(await evaluate(viewer, "document.querySelector('.tile-volume-value').textContent==='300%' && document.querySelector('video').muted"), "web viewer receives real 300% gain without duplicate video audio playback");
+	await evaluate(viewer, "document.querySelector('.tile-mute').click(); true");
+	await waitFor(viewer, `(${boostMeasure}).target < 0.001`, "boosted mute silences the graph");
+	await evaluate(viewer, "document.querySelector('.tile-mute').click(); true");
+	await waitFor(viewer, `(${boostMeasure}).target > ${levels.target * 2.4}`, "unmute restores 300% gain");
+	await evaluate(viewer, "{const slider=document.querySelector('.tile-volume'); slider.value='35'; slider.dispatchEvent(new Event('input'));} true");
+	await waitFor(viewer, `(${boostMeasure}).target < 0.001`, "returning below 100% silences the boost graph");
+	check(await evaluate(viewer, "document.querySelector('video').volume===0.35 && !document.querySelector('video').muted && boostCheck.gain.gain.value===0"), "returning below 100% silences the boost graph and restores native playback");
 	await evaluate(viewer, `(() => {
 		const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=360;
 		const context=canvas.getContext('2d'); context.fillStyle='blue'; context.fillRect(0,0,640,360);
 		window.previewFrames=setInterval(()=>context.fillRect(0,0,640,360),100);
-		navigator.mediaDevices.getDisplayMedia=async()=>canvas.captureStream(10);
+		const audio=new AudioContext(), oscillator=audio.createOscillator(), quiet=audio.createGain(), output=audio.createMediaStreamDestination();
+		oscillator.frequency.value=660; quiet.gain.value=0.05; oscillator.connect(quiet).connect(output); oscillator.start(); audio.resume(); window.previewAudio=audio;
+		navigator.mediaDevices.getDisplayMedia=async()=>new MediaStream([...canvas.captureStream(10).getVideoTracks(),...output.stream.getAudioTracks()]);
 		document.getElementById('shareBtn').click();
 	})()`);
 	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 2", "Windows receives a second stream");
@@ -158,6 +181,12 @@ try {
 		const slider=tile.querySelector('.tile-volume'); slider.value='25'; slider.dispatchEvent(new Event('input'));
 		return small.top>=main.bottom && small.width<main.width && tile.querySelector('video').volume===0.25 && tile.classList.contains('focused');
 	})()`), "Windows keeps another stream below the focused video and adjusts its volume");
+	await evaluate(host, boostProbe);
+	await evaluate(host, "{const slider=remoteTile.querySelector('.tile-volume'); slider.value='300'; slider.dispatchEvent(new Event('input'));} true");
+	const windowsBoostMeasure = boostMeasure.replace("amplitude(440)", "amplitude(660)");
+	await waitFor(host, `boostCheck.gain.gain.value > 2.9 && (${windowsBoostMeasure}).target > 0.08`, "Windows amplifies received quiet audio");
+	check(await evaluate(host, "remoteTile.querySelector('.tile-volume-value').textContent==='300%' && boostCheck.gain.gain.value>2.9"), "Windows viewer amplifies a real received stream to 300%");
+	await evaluate(host, "{const slider=remoteTile.querySelector('.tile-volume'); slider.value='25'; slider.dispatchEvent(new Event('input'));} true");
 	await evaluate(host, "remoteTile.querySelector('.tile-fullscreen').click(); true");
 	await waitFor(host, "document.fullscreenElement === remoteTile", "Windows fullscreen");
 	check(await evaluate(host, "getComputedStyle(remoteTile.querySelector('.tile-fullscreen-exit')).display !== 'none'"), "Windows full screen has a visible exit X");
@@ -184,7 +213,8 @@ try {
 	await waitFor(host, "!document.body.classList.contains('in-app-fullscreen')", "removing a stream restores the app");
 	await evaluate(host, "savedTileParent.append(remoteTile); true");
 	check(true, "A removed stream restores the application chrome");
-	await evaluate(viewer, "document.getElementById('shareBtn').click(); clearInterval(previewFrames); true");
+	await evaluate(viewer, "document.getElementById('shareBtn').click(); clearInterval(previewFrames); previewAudio.close(); true");
+	await waitFor(host, "boostCheck.ctx.state==='closed'", "removing a stream releases its audio graph");
 	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 1", "second stream stops");
 	await evaluate(viewer, "audioCheck.ctx.close(); true");
 	server.stop();

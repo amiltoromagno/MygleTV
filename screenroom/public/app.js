@@ -123,7 +123,7 @@ function ensureTile(key, label, isSelf) {
 	// the Linux desktop app -- the only client excluded -- with no volume slider,
 	// no full screen and no focus control, while the code it was being denied was
 	// platform-neutral all along.
-	addStreamControls({ root, video, bar, mute, isSelf, toast });
+	const player = addStreamControls({ root, video, bar, mute, isSelf, toast });
 
 	if (!isSelf) {
 		root.addEventListener("click", () => toggleFocus(key));
@@ -141,7 +141,7 @@ function ensureTile(key, label, isSelf) {
 		overlay.hidden = true;
 	});
 
-	const tile = { root, video, overlay, nameEl, mute };
+	const tile = { root, video, overlay, nameEl, mute, player };
 	tiles.set(key, tile);
 	return tile;
 }
@@ -177,6 +177,7 @@ function renderStage() {
 		const stream = isSelf ? state.localStream : state.streams.get(peerId);
 		if (stream && tile.video.srcObject !== stream) {
 			tile.video.srcObject = stream;
+			tile.player.setStream(stream);
 			if (isSelf) {
 				tile.overlay.hidden = true;
 			} else {
@@ -188,6 +189,7 @@ function renderStage() {
 	// Drop tiles for people who stopped sharing or left.
 	for (const [key, tile] of [...tiles]) {
 		if (wanted.has(key)) continue;
+		tile.player.dispose();
 		tile.video.srcObject = null;
 		tile.root.remove();
 		tiles.delete(key);
@@ -387,6 +389,7 @@ function makePeer(id, name, sharing) {
 			const tile = tiles.get(tileKey(peerId));
 			if (tile && tile.video.srcObject !== stream) {
 				tile.video.srcObject = stream;
+				tile.player.setStream(stream);
 				playTile(tile);
 			}
 		},
@@ -424,6 +427,7 @@ function removePeer(id) {
 	const key = tileKey(id);
 	const tile = tiles.get(key);
 	if (tile) {
+		tile.player.dispose();
 		tile.video.srcObject = null;
 		tile.root.remove();
 		tiles.delete(key);
@@ -441,6 +445,7 @@ function resetPeers() {
 
 	for (const [key, tile] of [...tiles]) {
 		if (key === SELF_KEY) continue;
+		tile.player.dispose();
 		tile.video.srcObject = null;
 		tile.root.remove();
 		tiles.delete(key);

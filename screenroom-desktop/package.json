@@ -17,7 +17,8 @@
     "check:windows": "electron test/windows-electron-check.mjs",
     "check:windows-package": "node test/windows-package-check.mjs",
     "pack:windows": "electron-builder --config electron-builder.windows.yml --win --x64 --dir",
-    "dist:windows": "electron-builder --config electron-builder.windows.yml --win --x64"
+    "dist:windows": "electron-builder --config electron-builder.windows.yml --win --x64",
+    "check:linux-parity": "node test/linux-parity-check.mjs"
   },
   "engines": {
     "node": ">=18"

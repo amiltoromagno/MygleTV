@@ -117,18 +117,19 @@ function ensureTile(key, label, isSelf) {
 
 	bar.append(nameEl, badge, mute);
 	root.append(video, overlay, bar);
-	const enhancedPlayer = !hasNative || isWindowsNative;
-	if (enhancedPlayer) addStreamControls({ root, video, bar, mute, isSelf, toast });
+	// Every client gets the same player.
+	//
+	// This was once gated to browsers and the Windows shell, which quietly left
+	// the Linux desktop app -- the only client excluded -- with no volume slider,
+	// no full screen and no focus control, while the code it was being denied was
+	// platform-neutral all along.
+	addStreamControls({ root, video, bar, mute, isSelf, toast });
 
 	if (!isSelf) {
-		if (!enhancedPlayer) mute.addEventListener("click", (event) => {
-			event.stopPropagation();
-			video.muted = !video.muted;
-			mute.textContent = video.muted ? "🔇" : "🔊";
-		});
 		root.addEventListener("click", () => toggleFocus(key));
 		root.addEventListener("keydown", (event) => {
-			if (enhancedPlayer && event.target !== root) return;
+			// Keys pressed inside the control bar belong to the controls.
+			if (event.target !== root) return;
 			if (event.key === "Enter" || event.key === " ") {
 				event.preventDefault();
 				toggleFocus(key);
@@ -225,7 +226,7 @@ function toggleFocus(key) {
 
 function applyFocus() {
 	$("stage").classList.toggle("focus", Boolean(state.focused));
-	$("stage").classList.toggle("focus-preview", (!hasNative || isWindowsNative) && Boolean(state.focused));
+	$("stage").classList.toggle("focus-preview", Boolean(state.focused));
 	for (const [key, tile] of tiles) {
 		tile.root.classList.toggle("focused", key === state.focused);
 	}
@@ -255,7 +256,7 @@ function renderRoster() {
 		name.textContent = entry.self ? `${entry.name} (you)` : entry.name;
 
 		let content = item;
-		if (!entry.self && (!hasNative || isWindowsNative)) {
+		if (!entry.self) {
 			content = document.createElement("button");
 			content.type = "button";
 			content.className = "roster-member";

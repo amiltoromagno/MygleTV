@@ -1,5 +1,7 @@
 appId: com.mygletv.desktop
 productName: MygleTV
+extraMetadata:
+  homepage: https://github.com/amiltoromagno/MygleTV
 directories:
   output: dist/linux
 files:

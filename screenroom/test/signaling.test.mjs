@@ -93,6 +93,34 @@ after(() => {
 	if (server) server.kill("SIGKILL");
 });
 
+test("kick removes only the chosen session, not names or other rooms", async () => {
+	const alice = connect(), bob = connect(), observer = connect(), otherRoom = connect(), stranger = connect();
+	const clients = [alice, bob, observer, otherRoom, stranger];
+	try {
+		await Promise.all(clients.map((client) => client.opened));
+		const ids = [];
+		for (const [index, client] of [alice, bob, observer, otherRoom].entries()) {
+			client.send({ t: "join", room: index === 3 ? "kick-other" : "kick-room", name: "Duplicate" });
+			ids.push((await client.waitFor((m) => m.t === "welcome", "welcome")).id);
+		}
+		stranger.send({ t: "kick", to: ids[1] });
+		alice.send({ t: "kick", to: ids[3] });
+		await alice.waitFor((m) => m.t === "error", "cross-room kick rejected");
+		await settle(100);
+		assert.equal(bob.ws.readyState, WebSocket.OPEN);
+		assert.equal(otherRoom.ws.readyState, WebSocket.OPEN);
+		const closed = new Promise((resolve) => bob.ws.once("close", (code) => resolve(code)));
+		alice.send({ t: "kick", to: ids[1] });
+		await bob.waitFor((m) => m.t === "kicked", "removal notice");
+		assert.equal(await closed, 4003);
+		await Promise.all([alice, observer].map((client) => client.waitFor((m) => m.t === "peer-leave" && m.id === ids[1], "departure")));
+		await settle(100);
+		for (const client of [alice, observer]) assert.equal(client.messages.filter((m) => m.t === "peer-leave" && m.id === ids[1]).length, 1);
+		assert.equal(observer.ws.readyState, WebSocket.OPEN);
+		assert.equal(otherRoom.messages.some((m) => m.t === "peer-leave"), false);
+	} finally { clients.forEach((client) => client.close()); }
+});
+
 test("a joining client is welcomed with an empty peer list", async () => {
 	const alice = connect();
 	await alice.opened;

@@ -67,6 +67,10 @@ try { page = (await (await fetch("http://127.0.0.1:9377/json")).json()).find((p)
 		assert.equal((await fetch(new URL("/pcm-worklet.js", page.url))).status, 200);
 		assert.equal((await fetch(new URL("/windows-screen-picker.js", page.url))).status, 200);
 		console.log("PASS Windows renderer modules are included in the package");
+		assert.equal((await fetch(new URL("/windows-window.js", page.url))).status, 200);
+		assert.equal(await evaluate("typeof screenroomNative.windowControl"), "function");
+		assert.equal(await evaluate("!!document.querySelector('.windows-caption [data-window-action=close]')"), true);
+		console.log("PASS borderless Windows caption and window control bridge are packaged");
 		for (const module of ["windows-quality.js", "windows-peers.js", "share-quality.js"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
 		assert.equal(await evaluate("typeof screenroomNative.getQuality"), "function");
 		assert.equal(await evaluate("typeof screenroomNative.saveQuality"), "function");

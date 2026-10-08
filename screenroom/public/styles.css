@@ -430,6 +430,68 @@ body {
 
 /* ---------------------------------------------------------- empty state */
 
+.windows-window { padding-top: 32px; }
+.windows-caption {
+	position: fixed;
+	inset: 0 0 auto;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	background: var(--bg);
+	z-index: 100;
+	-webkit-app-region: drag;
+}
+.windows-caption span { flex: 1; padding-left: 12px; font-size: 12px; }
+.windows-caption button {
+	-webkit-app-region: no-drag;
+	width: 46px;
+	height: 32px;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	font-size: 20px;
+}
+.windows-caption button:hover { background: var(--panel-2); }
+.windows-caption button[data-window-action="close"]:hover { background: #c42b1c; }
+.windows-window.in-app-fullscreen,
+.windows-window.monitor-fullscreen { padding-top: 0; overflow: hidden; }
+.in-app-fullscreen .windows-caption,
+.monitor-fullscreen .windows-caption { display: none; }
+.tile-in-app-fullscreen {
+	font: inherit;
+	font-size: 11px;
+	color: var(--text);
+	background: rgba(255, 255, 255, 0.1);
+	border: 0;
+	border-radius: 7px;
+	padding: 6px;
+	cursor: pointer;
+}
+body.in-app-fullscreen .stage .tile.in-app-player {
+	display: block;
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	aspect-ratio: auto;
+	border: 0;
+	border-radius: 0;
+	outline: 0;
+	z-index: 200;
+}
+.in-app-player .tile-fullscreen-exit {
+	display: block;
+	position: absolute;
+	top: 16px;
+	right: 16px;
+	font-size: 32px;
+	background: rgba(0, 0, 0, 0.7);
+}
+.in-app-player .tile-in-app-fullscreen,
+.tile-player:fullscreen .tile-in-app-fullscreen { display: none; }
+
 .empty {
 	position: absolute;
 	inset: 0;
@@ -490,6 +552,37 @@ body {
 .roster-item.sharing {
 	background: var(--panel-2);
 }
+
+.roster-member {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	width: 100%;
+	min-width: 0;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+}
+.roster-member:hover .roster-name { color: var(--accent); }
+.roster-member:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.kick-dialog {
+	color: var(--text);
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	padding: 24px;
+	max-width: min(440px, 90vw);
+}
+.kick-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+.kick-dialog h2 { margin-top: 0; overflow-wrap: anywhere; }
+.kick-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+.btn-danger { background: #6b2633; border-color: #9a3b4c; }
+.btn-danger:hover { background: #8b3040; }
+.session-removed { margin: 0; padding: 16px; color: var(--warn); background: var(--panel); }
 
 .roster-dot {
 	width: 7px;

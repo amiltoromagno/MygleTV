@@ -73,6 +73,7 @@ export class Room extends DurableObject {
 		if (!msg || typeof msg !== "object" || typeof msg.t !== "string") return;
 
 		const attachment = ws.deserializeAttachment() || {};
+		if (attachment.expelled) return;
 		const members = this.members().map(stripSocket);
 
 		if (msg.t === "join") {
@@ -103,6 +104,7 @@ export class Room extends DurableObject {
 		// describeLeave takes the member's own record, because by the time a close
 		// is handled the socket may already be gone from getWebSockets().
 		const { effects } = describeLeave(attachment);
+		ws.serializeAttachment({ ...attachment, joined: false });
 		this.apply(effects);
 	}
 
@@ -112,7 +114,18 @@ export class Room extends DurableObject {
 		const byId = new Map(this.members().map((member) => [member.id, member.ws]));
 
 		for (const effect of effects) {
-			if (effect.type === "reply" || effect.type === "send") {
+			if (effect.type === "kick") {
+				const target = byId.get(effect.to);
+				if (!target) continue;
+				const attachment = target.deserializeAttachment() || {};
+				if (!attachment.joined) continue;
+				// Persist removal before closing: a closing socket can still be listed
+				// by the hibernation API and must not rejoin or relay more messages.
+				target.serializeAttachment({ ...attachment, joined: false, expelled: true });
+				this.send(target, { t: "kicked" });
+				this.apply(describeLeave(attachment).effects);
+				try { target.close(4003, "Removed from room"); } catch { /* already closed */ }
+			} else if (effect.type === "reply" || effect.type === "send") {
 				const target = byId.get(effect.to);
 				if (target) this.send(target, effect.message);
 			} else if (effect.type === "broadcast") {

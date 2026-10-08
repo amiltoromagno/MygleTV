@@ -25,6 +25,25 @@ const member = (id, extra = {}) => ({
 	...extra,
 });
 
+test("a joined member can kick a specific joined peer even with duplicate names", () => {
+	const members = [member("p1", { name: "Same" }), member("p2", { name: "Same" }), member("p3")];
+	assert.deepEqual(describeMessage(members, "p1", { t: "kick", to: "p2" }), { effects: [{ type: "kick", to: "p2" }] });
+});
+
+test("kick rejects self, unknown and unjoined targets", () => {
+	const members = [member("p1"), member("p2", { joined: false })];
+	for (const to of ["p1", "p2", "another-room-id", null, {}]) {
+		const result = describeMessage(members, "p1", { t: "kick", to });
+		assert.equal(result.effects[0].type, "reply");
+		assert.equal(result.effects[0].message.t, "error");
+	}
+});
+
+test("unjoined and removed senders cannot kick", () => {
+	const members = [member("p1", { joined: false }), member("p2")];
+	for (const id of ["p1", "missing"]) assert.deepEqual(describeMessage(members, id, { t: "kick", to: "p2" }), { effects: [] });
+});
+
 // ---------------------------------------------------------------------------
 // Names
 // ---------------------------------------------------------------------------

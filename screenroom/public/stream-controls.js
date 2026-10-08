@@ -1,4 +1,5 @@
 /** Playback controls shared by browser viewers and the Windows desktop app. */
+import { enterInAppFullscreen, exitInAppFullscreen } from "./windows-window.js";
 export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	root.classList.add("tile-player");
 	const volume = document.createElement("input");
@@ -41,6 +42,7 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	fullscreen.setAttribute("aria-label", "Full screen");
 	fullscreen.disabled = !document.fullscreenEnabled;
 	fullscreen.addEventListener("click", () => {
+		exitInAppFullscreen();
 		root.requestFullscreen().catch((err) => toast(`Could not enter full screen: ${err.message}`));
 	});
 	const exit = document.createElement("button");
@@ -51,6 +53,7 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	exit.setAttribute("aria-label", "Exit full screen");
 	exit.addEventListener("click", (event) => {
 		event.stopPropagation();
+		exitInAppFullscreen();
 		if (document.fullscreenElement) document.exitFullscreen().catch((err) => toast(err.message));
 	});
 	// Slider clicks and keyboard navigation must not also change the focused tile.
@@ -58,6 +61,15 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	bar.addEventListener("keydown", (event) => event.stopPropagation());
 	exit.addEventListener("keydown", (event) => event.stopPropagation());
 	bar.append(volume, fullscreen);
+	if (window.screenroomNative?.platform === "win32" && window.screenroomNative.windowControl) {
+		const inApp = document.createElement("button");
+		inApp.type = "button";
+		inApp.className = "tile-in-app-fullscreen";
+		inApp.textContent = "Full screen in app";
+		inApp.title = "Fill this application window";
+		inApp.addEventListener("click", () => enterInAppFullscreen(root));
+		bar.append(inApp);
+	}
 	root.append(exit);
 	sync();
 }

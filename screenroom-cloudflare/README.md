@@ -95,6 +95,14 @@ Worker behind the scenes.
 
 ## Deploying automatically on push
 
+The `kick` signaling message removes another joined session in the same room,
+not a display name or a participant in another room. Any member may kick another
+member. The removed client receives `kicked` and close code 4003; the room receives
+`peer-leave` once. Removal is persisted in the socket attachment before closing,
+so hibernation or queued messages cannot restore that connection. Updated clients
+stop media capture and do not automatically reconnect. This is session removal,
+not a permanent ban. Deploy the updated Worker as well as the frontend.
+
 Cloudflare's own Git integration is called **Workers Builds**. There is nothing
 to add to this repository — it is configured in the dashboard:
 

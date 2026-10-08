@@ -2,6 +2,7 @@ import { DEFAULT_ROOM, DISPLAY_CONSTRAINTS } from "./config.js";
 import { connectSignaling } from "./signaling.js";
 import { Peer } from "./peers.js";
 import { addStreamControls } from "./stream-controls.js";
+import { setupWindowsWindow } from "./windows-window.js";
 import { WindowsPeer } from "./windows-peers.js";
 import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
 import { setupWindowsQuality } from "./windows-quality.js";
@@ -16,6 +17,7 @@ import {
 } from "./audio-source.js";
 
 const $ = (id) => document.getElementById(id);
+setupWindowsWindow();
 
 const SELF_KEY = "self";
 const tileKey = (peerId) => "peer:" + peerId;
@@ -55,6 +57,7 @@ const state = {
 	localStream: null,
 	localAudioTrack: null,
 	sharePending: false,
+	kicked: false,
 	quality: { ...DEFAULT_QUALITY },
 	/** Streams beyond the display capture that need stopping (mic, native audio). */
 	extraStreams: [],
@@ -215,7 +218,7 @@ function renderStage() {
 }
 
 function toggleFocus(key) {
-	if (document.fullscreenElement) return;
+	if (document.fullscreenElement || document.body.classList.contains("in-app-fullscreen")) return;
 	state.focused = state.focused === key ? null : key;
 	applyFocus();
 }
@@ -234,9 +237,9 @@ function applyFocus() {
 
 function renderRoster() {
 	const list = $("rosterList");
-	const entries = [{ name: state.name, sharing: state.sharing, self: true }];
-	for (const info of state.info.values()) {
-		entries.push({ name: info.name, sharing: info.sharing, self: false });
+	const entries = state.kicked ? [] : [{ name: state.name, sharing: state.sharing, self: true }];
+	for (const [id, info] of state.info) {
+		entries.push({ id, name: info.name, sharing: info.sharing, self: false });
 	}
 
 	list.textContent = "";
@@ -251,13 +254,24 @@ function renderRoster() {
 		name.className = "roster-name";
 		name.textContent = entry.self ? `${entry.name} (you)` : entry.name;
 
-		item.append(dot, name);
+		let content = item;
+		if (!entry.self && (!hasNative || isWindowsNative)) {
+			content = document.createElement("button");
+			content.type = "button";
+			content.className = "roster-member";
+			content.dataset.peerId = entry.id;
+			content.title = `Manage ${entry.name}`;
+			content.setAttribute("aria-label", `Manage ${entry.name}`);
+			content.addEventListener("click", () => confirmKick(entry.id));
+			item.append(content);
+		}
+		content.append(dot, name);
 
 		if (entry.sharing) {
 			const tag = document.createElement("span");
 			tag.className = "roster-tag";
 			tag.textContent = "sharing";
-			item.append(tag);
+			content.append(tag);
 		}
 
 		list.append(item);
@@ -265,6 +279,43 @@ function renderRoster() {
 
 	$("rosterCount").textContent = entries.length ? `(${entries.length})` : "";
 	renderStage();
+}
+
+function confirmKick(id) {
+	const info = state.info.get(id);
+	if (!info || state.kicked || document.getElementById("kickDialog")) return;
+	const dialog = document.createElement("dialog");
+	dialog.id = "kickDialog";
+	dialog.className = "kick-dialog";
+	dialog.setAttribute("aria-labelledby", "kickTitle");
+	const title = document.createElement("h2");
+	title.id = "kickTitle";
+	title.textContent = `Kick ${info.name}?`;
+	const message = document.createElement("p");
+	message.textContent = "Remove this participant from the session and stop their stream for everyone in this room?";
+	const actions = document.createElement("div");
+	actions.className = "kick-actions";
+	const cancel = document.createElement("button");
+	cancel.type = "button";
+	cancel.className = "btn";
+	cancel.textContent = "Cancel";
+	cancel.autofocus = true;
+	cancel.addEventListener("click", () => dialog.close());
+	const kick = document.createElement("button");
+	kick.type = "button";
+	kick.id = "confirmKick";
+	kick.className = "btn btn-danger";
+	kick.textContent = "Kick from session";
+	kick.addEventListener("click", () => {
+		if (!state.info.has(id)) toast("That participant has already left.");
+		else if (!state.signaling.kick(id)) toast("Not connected. Try again when the connection returns.");
+		dialog.close();
+	});
+	dialog.addEventListener("close", () => dialog.remove(), { once: true });
+	actions.append(cancel, kick);
+	dialog.append(title, message, actions);
+	document.body.append(dialog);
+	dialog.showModal();
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +494,7 @@ function updateShareButton() {
 }
 
 async function startShare() {
-	if (state.sharing) return;
+	if (state.sharing || state.kicked) return;
 	if (isWindowsNative) {
 		try {
 			await refreshAudioOptions();
@@ -451,6 +502,7 @@ async function startShare() {
 		}
 		catch (err) { toast(err.message); return; }
 	}
+	if (state.kicked) return;
 
 	// In the desktop shell the picker decides; in a browser we keep the display
 	// stream's own audio, exactly as before.
@@ -503,6 +555,7 @@ async function startShare() {
 		await stopNativeCapture();
 		if (isWindowsNative) state.extraStreams = state.extraStreams.filter((extra) => extra !== nativeStream);
 	}
+	if (state.kicked) { await abandonShare(); return; }
 
 	let stream;
 	try {
@@ -518,6 +571,11 @@ async function startShare() {
 			return;
 		}
 		toast("Could not start sharing: " + (err?.message || err));
+		return;
+	}
+	if (state.kicked) {
+		for (const track of stream.getTracks()) track.stop();
+		await abandonShare();
 		return;
 	}
 
@@ -605,7 +663,7 @@ async function stopShare() {
 function setStatus(status) {
 	$("statusDot").dataset.state = status;
 	$("statusText").textContent =
-		status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : "Connecting…";
+		status === "kicked" ? "Removed from room" : status === "connected" ? "Connected" : status === "reconnecting" ? "Reconnecting…" : "Connecting…";
 }
 
 let toastTimer = null;
@@ -639,6 +697,21 @@ async function copyInviteLink() {
 
 const handlers = {
 	onStatus: setStatus,
+	onKicked() {
+		state.kicked = true;
+		$("shareBtn").disabled = true;
+		for (const dialog of document.querySelectorAll("dialog[open]")) {
+			dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+			if (dialog.open) dialog.close();
+		}
+		resetPeers();
+		void stopShare().catch((err) => console.error(err));
+		const notice = document.createElement("p");
+		notice.className = "session-removed";
+		notice.setAttribute("role", "alert");
+		notice.textContent = "You were removed from this room. Your stream has stopped. Reload the page or app to join again.";
+		$("app").prepend(notice);
+	},
 
 	onWelcome({ id, peers }) {
 		state.selfId = id;
@@ -710,7 +783,7 @@ function enterRoom(name) {
 		$("shareBtn").disabled = true;
 		Promise.resolve(state.sharing ? stopShare() : startShare())
 			.catch((err) => toast(err.message))
-			.finally(() => { state.sharePending = false; $("shareBtn").disabled = false; });
+			.finally(() => { state.sharePending = false; $("shareBtn").disabled = state.kicked; });
 	});
 	$("copyBtn").addEventListener("click", copyInviteLink);
 
@@ -741,13 +814,13 @@ function enterRoom(name) {
 						...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
 					]);
 					throw err;
-				} finally { state.sharePending = false; $("shareBtn").disabled = false; }
+				} finally { state.sharePending = false; $("shareBtn").disabled = state.kicked; }
 			},
-		}).finally(() => { $("shareBtn").disabled = false; });
+		}).finally(() => { $("shareBtn").disabled = state.kicked; });
 	}
 
 	document.addEventListener("keydown", (event) => {
-		if (event.key === "Escape" && state.focused && !document.fullscreenElement) {
+		if (event.key === "Escape" && state.focused && !document.fullscreenElement && !document.body.classList.contains("in-app-fullscreen")) {
 			state.focused = null;
 			applyFocus();
 		}

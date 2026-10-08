@@ -140,10 +140,18 @@ try {
 	);
 	stranger.close();
 
-	// Departure.
-	bob.close();
+	// Kicking cannot reach a different room.
+	alice.send({ t: "kick", to: welcomeC.id });
+	await alice.waitFor((m) => m.t === "error", "cross-room kick rejection");
+	check(carol.ws.readyState === WebSocket.OPEN, "kick cannot remove someone from another room");
+	const kickedClose = new Promise((resolve) => bob.ws.once("close", (code) => resolve(code)));
+	alice.send({ t: "kick", to: welcomeB.id });
+	await bob.waitFor((m) => m.t === "kicked", "kicked notice");
+	check(await kickedClose === 4003, "kicked session receives a removal notice and close code");
 	const departed = await alice.waitFor((m) => m.t === "peer-leave", "peer-leave");
 	check(departed.id === welcomeB.id, "a departure is announced to the room");
+	await sleep(200);
+	check(alice.messages.filter((m) => m.t === "peer-leave" && m.id === welcomeB.id).length === 1, "kick announces departure exactly once");
 
 	alice.close();
 	carol.close();

@@ -5,7 +5,11 @@ import { resolveWindowAudio } from "./audio/windows.js";
 /** Windows-only wiring; the Linux shell and preload are unchanged. */
 export function createWindowsShell(options) {
 	const { ipcMain, session, desktopCapturer, captureSession, url } = options;
-	const shell = createShell(options);
+	// Windows uses an HTML caption so it can disappear without resizing the window.
+	class WindowsWindow extends options.BrowserWindow {
+		constructor(settings) { super({ ...settings, frame: false, thickFrame: false, roundedCorners: false }); }
+	}
+	const shell = createShell({ ...options, BrowserWindow: WindowsWindow });
 	let selected = null;
 	let offered = new Set();
 	let sequence = 0;
@@ -26,6 +30,14 @@ export function createWindowsShell(options) {
 	async function start() {
 		await shell.start();
 		const qualityStore = createQualityStore(options.app.getPath("userData"));
+		ipcMain.handle("window:control", (event, action) => {
+			if (!trusted(event)) throw new Error("Untrusted window request.");
+			const win = shell.window;
+			if (action === "minimize") win.minimize();
+			else if (action === "maximize") win.isMaximized() ? win.unmaximize() : win.maximize();
+			else if (action === "close") win.close();
+			else throw new Error("Unknown window action.");
+		});
 		ipcMain.handle("quality:read", (event) => trusted(event) ? qualityStore.read() : null);
 		ipcMain.handle("quality:write", (event, value) => {
 			if (!trusted(event)) throw new Error("Untrusted settings request.");

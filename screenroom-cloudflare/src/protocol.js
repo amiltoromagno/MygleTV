@@ -51,6 +51,13 @@ export function describeMessage(members, id, msg) {
 	const self = members.find((m) => m.id === id);
 	if (!self || !self.joined) return { effects: [] };
 
+	if (msg.t === "kick") {
+		if (typeof msg.to !== "string" || msg.to === id || !members.some((m) => m.id === msg.to && m.joined)) {
+			return { effects: [{ type: "reply", to: id, message: { t: "error", message: "That participant is no longer available to kick." } }] };
+		}
+		return { effects: [{ type: "kick", to: msg.to }] };
+	}
+
 	if (msg.t === "signal") {
 		// Relayed opaquely: the payload is never inspected.
 		if (typeof msg.to !== "string") return { effects: [] };

@@ -163,6 +163,27 @@ try {
 	check(await evaluate(host, "getComputedStyle(remoteTile.querySelector('.tile-fullscreen-exit')).display !== 'none'"), "Windows full screen has a visible exit X");
 	await evaluate(host, "remoteTile.querySelector('.tile-fullscreen-exit').click(); true");
 	await waitFor(host, "!document.fullscreenElement", "Windows exits fullscreen");
+	await waitFor(host, "!document.body.classList.contains('monitor-fullscreen')", "Windows restores caption after monitor fullscreen");
+	const windowBounds = host.getBounds();
+	await evaluate(host, "remoteTile.querySelector('.tile-in-app-fullscreen').click(); true");
+	check(await evaluate(host, `(() => {
+		const box = remoteTile.getBoundingClientRect();
+		return !document.fullscreenElement && box.x === 0 && box.y === 0 &&
+			Math.abs(box.width - innerWidth) < 1 && Math.abs(box.height - innerHeight) < 1 &&
+			getComputedStyle(remoteTile).borderTopWidth === '0px' &&
+			getComputedStyle(document.querySelector('.windows-caption')).display === 'none' &&
+			getComputedStyle(remoteTile.querySelector('.tile-fullscreen-exit')).display !== 'none';
+	})()`), "In-app fullscreen fills the client area without chrome or borders");
+	assert.deepEqual(host.getBounds(), windowBounds, "In-app fullscreen preserves the window bounds");
+	await evaluate(host, "remoteTile.querySelector('.tile-fullscreen-exit').click(); true");
+	check(await evaluate(host, "!document.body.classList.contains('in-app-fullscreen') && getComputedStyle(document.querySelector('.windows-caption')).display !== 'none'"), "Exit X restores the caption and streams");
+	await evaluate(host, "remoteTile.querySelector('.tile-in-app-fullscreen').click(); document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true})); true");
+	check(await evaluate(host, "!document.body.classList.contains('in-app-fullscreen') && remoteTile.classList.contains('focused')"), "Escape exits in-app fullscreen and keeps the selected stream focused");
+	await evaluate(host, `remoteTile.querySelector('.tile-in-app-fullscreen').click();
+		window.savedTileParent=remoteTile.parentNode; remoteTile.remove(); true`);
+	await waitFor(host, "!document.body.classList.contains('in-app-fullscreen')", "removing a stream restores the app");
+	await evaluate(host, "savedTileParent.append(remoteTile); true");
+	check(true, "A removed stream restores the application chrome");
 	await evaluate(viewer, "document.getElementById('shareBtn').click(); clearInterval(previewFrames); true");
 	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 1", "second stream stops");
 	await evaluate(viewer, "audioCheck.ctx.close(); true");
@@ -218,6 +239,29 @@ try {
 	await waitFor(host, "!!document.getElementById('gateForm')", "reload");
 	await sleep(200);
 	check(!capture.isActive(), "renderer reload releases capture");
+	await evaluate(host, "document.getElementById('nameInput').value='Windows host'; document.getElementById('gateForm').requestSubmit(); true");
+	await waitFor(host, "document.getElementById('statusText').textContent === 'Connected' && !document.getElementById('shareBtn').disabled", "host rejoins for moderation check");
+	await evaluate(host, "document.querySelector('#rosterList .roster-member').click(); true");
+	check(await evaluate(host, "document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Late viewer')"), "Windows roster click opens a kick confirmation for the selected member");
+	await evaluate(host, "document.getElementById('confirmKick').click(); true");
+	await waitFor(viewer, "document.getElementById('statusText').textContent === 'Removed from room'", "Windows kicks browser participant");
+	await waitFor(host, "document.querySelectorAll('#rosterList li').length === 1", "Windows removes browser from roster");
+	viewer.webContents.reload();
+	await waitFor(viewer, "!!document.getElementById('gateForm')", "viewer reload");
+	await evaluate(viewer, "document.getElementById('nameInput').value='Late viewer'; document.getElementById('gateForm').requestSubmit(); true");
+	await waitFor(viewer, "document.querySelectorAll('#rosterList li').length === 2", "viewer explicitly rejoins");
+	await evaluate(host, "document.getElementById('shareBtn').click(); true");
+	await waitFor(host, "!!document.getElementById('confirmScreenShare')", "moderation audio picker");
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('shareWindowAudio').checked=true; document.getElementById('shareWindowAudio').dispatchEvent(new Event('change')); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "moderation native capture starts");
+	check(capture.isActive(), "native audio is active before removal");
+	await waitFor(viewer, "document.querySelector('#stage video')?.videoWidth > 0", "viewer receives Windows stream before kick");
+	await evaluate(host, "window.captureBeforeKick=document.querySelector('#stage video').srcObject; true");
+	await evaluate(viewer, "document.querySelector('#rosterList .roster-member').click(); document.getElementById('confirmKick').click(); true");
+	await waitFor(host, "document.getElementById('statusText').textContent === 'Removed from room' && captureBeforeKick.getTracks().every(t=>t.readyState==='ended')", "browser kicks Windows sharer");
+	await sleep(800);
+	check(!capture.isActive() && await evaluate(host, "document.getElementById('shareBtn').disabled && !!document.querySelector('.session-removed')"), "kick stops Windows WASAPI and video and prevents automatic rejoining");
+	check(await evaluate(viewer, "document.querySelectorAll('#rosterList li').length === 1 && document.querySelectorAll('#stage video').length === 0"), "kick removes Windows stream and roster entry from the web");
 	code = 0;
 } catch (err) {
 	console.error(err.stack);

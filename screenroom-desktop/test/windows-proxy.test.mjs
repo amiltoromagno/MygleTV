@@ -62,6 +62,23 @@ test("proxy rejects websocket requests from another website", async () => {
 	const socket = new WebSocket(new URL("/ws", proxy.url).toString().replace("http:", "ws:"), { origin: "https://untrusted.example" });
 	await assert.rejects(new Promise((resolve, reject) => { socket.once("open", resolve); socket.once("error", reject); }), /socket hang up/);
 });
+
+test("Windows proxy delivers a kick and preserves its intentional close code", async () => {
+	const room = "proxy-kick";
+	const desktop = client(new URL(`/ws?room=${room}`, proxy.url).toString().replace("http:", "ws:"), new URL(proxy.url).origin);
+	await desktop.opened;
+	desktop.socket.send(JSON.stringify({ t: "join", room, name: "Desktop" }));
+	const { id } = await desktop.wait((m) => m.t === "welcome");
+	const browser = client(`${relay.url.replace("http:", "ws:")}ws?room=${room}`);
+	await browser.opened;
+	browser.socket.send(JSON.stringify({ t: "join", room, name: "Browser" }));
+	await browser.wait((m) => m.t === "welcome");
+	const closed = new Promise((resolve) => desktop.socket.once("close", (code) => resolve(code)));
+	browser.socket.send(JSON.stringify({ t: "kick", to: id }));
+	await desktop.wait((m) => m.t === "kicked");
+	assert.equal(await closed, 4003);
+	await browser.wait((m) => m.t === "peer-leave" && m.id === id);
+});
 test("relay URLs reject credentials, unsupported protocols and insecure remote hosts", () => {
 	for (const url of ["file:///tmp/app", "https://user:pass@example.com", "http://example.com", "invalid"]) assert.throws(() => validateRelayUrl(url));
 	assert.equal(validateRelayUrl("https://example.com/?room=abc").searchParams.get("room"), "abc");

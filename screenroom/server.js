@@ -194,6 +194,7 @@ function leaveRoom(client) {
 }
 
 function route(client, msg) {
+	if (client.expelled) return;
 	if (msg.t === "join") {
 		joinRoom(client, msg);
 		return;
@@ -205,6 +206,18 @@ function route(client, msg) {
 	if (!room) return;
 
 	switch (msg.t) {
+		case "kick": {
+			const target = typeof msg.to === "string" ? room.get(msg.to) : null;
+			if (!target || target === client) {
+				send(client, { t: "error", message: "That participant is no longer available to kick." });
+				break;
+			}
+			target.expelled = true;
+			send(target, { t: "kicked" });
+			leaveRoom(target);
+			target.ws.close(4003, "Removed from room");
+			break;
+		}
 		case "signal": {
 			// Deliberately opaque: we forward the payload without reading it.
 			const target = room.get(msg.to);

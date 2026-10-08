@@ -179,7 +179,8 @@ async function openPage(debugPort) {
 					ctx.font = "40px sans-serif";
 					ctx.fillText("stub " + frame, 30, 190);
 				}, 80);
-				return canvas.captureStream(15);
+				window.testCapture = canvas.captureStream(15);
+				return window.testCapture;
 			};
 		})();`,
 	});
@@ -400,6 +401,17 @@ try {
 		"the button returns to Share screen after stopping",
 	);
 
+	check(await pageA.evaluate("!document.querySelector('#rosterList li:first-child button')"), "your own roster entry cannot kick yourself");
+	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); true");
+	check(await pageA.evaluate("document.getElementById('kickDialog').open && document.getElementById('kickTitle').textContent.includes('Bob')"), "clicking a participant opens their kick confirmation");
+	await pageA.evaluate("document.querySelector('#kickDialog .btn').click(); true");
+	check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Connected'"), "cancel leaves the participant connected");
+	await pageA.evaluate("document.querySelector('#rosterList .roster-member').click(); document.getElementById('confirmKick').click(); true");
+	await pageB.waitFor("document.getElementById('statusText').textContent === 'Removed from room' && window.testCapture.getTracks().every(t=>t.readyState==='ended')", "kick stops the sharer's session and tracks");
+	await pageA.waitFor("document.querySelectorAll('#stage .tile').length === 0 && document.querySelectorAll('#rosterList li').length === 1", "kick removes stale streams and roster entries");
+	await sleep(1500);
+	check(await pageB.evaluate("document.getElementById('statusText').textContent === 'Removed from room' && document.getElementById('shareBtn').disabled && !!document.querySelector('.session-removed')"), "kicked participant stays disconnected with sharing disabled and a persistent notice");
+	check(await pageA.evaluate("document.querySelectorAll('#rosterList li').length === 1"), "kick suppresses automatic rejoining");
 	clearTimeout(overall);
 
 	if (failures.length) {

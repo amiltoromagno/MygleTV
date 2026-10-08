@@ -88,6 +88,22 @@ muted to avoid feedback. The full-screen button opens an individual stream;
 the **×** at the top right or **Esc** exits. Volume controls remain available
 in full screen. These playback controls do not change the shared audio track.
 
+Windows also has **Full screen in app** on each stream. It fills the existing
+window without resizing it and hides the application UI, caption buttons and
+tile borders. **×** or **Esc** restores the room. If the stream ends, the room
+returns automatically. The video keeps its aspect ratio, so different source
+and window proportions can leave black space. The regular full-screen button
+still fills the monitor. A custom Windows caption provides minimize, maximize /
+restore and close in the normal view.
+
+In Windows and browser clients, click another participant under **In this room**
+and confirm **Kick from session** to remove their current connection. Any joined
+participant can do this; there are no administrator roles. The relay removes the
+member for everyone, their client stops capture, and automatic reconnection is
+disabled. Removal targets a session ID, so duplicate display names are safe.
+This is not a permanent ban: reloading lets the participant join deliberately.
+The Cloudflare Worker and clients must both be updated for this feature.
+
 ## Build
 
 ```powershell

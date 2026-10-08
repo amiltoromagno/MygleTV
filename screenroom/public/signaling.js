@@ -15,6 +15,16 @@ export function connectSignaling({ room, name, handlers }) {
 	let retryTimer = null;
 	let joinedId = null;
 
+	function kicked() {
+		if (closedByUs) return;
+		closedByUs = true;
+		clearTimeout(retryTimer);
+		joinedId = null;
+		handlers.onStatus("kicked");
+		handlers.onKicked?.();
+		socket?.close();
+	}
+
 	function url() {
 		const scheme = location.protocol === "https:" ? "wss:" : "ws:";
 		// The room travels in the URL, not only in the join message: on Cloudflare
@@ -46,6 +56,7 @@ export function connectSignaling({ room, name, handlers }) {
 		};
 
 		socket.onmessage = (event) => {
+			if (closedByUs) return;
 			let msg;
 			try {
 				msg = JSON.parse(event.data);
@@ -55,6 +66,9 @@ export function connectSignaling({ room, name, handlers }) {
 			if (!msg || typeof msg !== "object") return;
 
 			switch (msg.t) {
+				case "kicked":
+					kicked();
+					break;
 				case "welcome":
 					joinedId = msg.id;
 					handlers.onStatus("connected");
@@ -81,7 +95,8 @@ export function connectSignaling({ room, name, handlers }) {
 			}
 		};
 
-		socket.onclose = () => {
+		socket.onclose = (event) => {
+			if (event.code === 4003) kicked();
 			if (closedByUs) return;
 			// The other peers can no longer reach us, so the mesh is rebuilt on
 			// the next welcome rather than left half-dead.
@@ -114,6 +129,9 @@ export function connectSignaling({ room, name, handlers }) {
 		},
 		setSharing(on) {
 			return send({ t: "sharing", on: on === true });
+		},
+		kick(to) {
+			return !closedByUs && joinedId !== null && send({ t: "kick", to });
 		},
 		setName(next) {
 			return send({ t: "name", name: next });

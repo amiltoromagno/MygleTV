@@ -62,7 +62,13 @@ export async function startWindowsRelayProxy({ relayUrl, publicDir }) {
 			});
 			upstream.on("open", () => { for (const message of queued) forward(upstream, message.data, message.binary); queued = []; queueBytes = 0; });
 			upstream.on("message", (data, binary) => forward(client, data, binary));
-			for (const ws of [client, upstream]) { ws.on("close", close); ws.on("error", close); }
+			client.on("close", close);
+			upstream.on("close", (code) => {
+				// Preserve intentional removal even if the kicked message was lost.
+				if (code === 4003 && client.readyState === WebSocket.OPEN) client.close(4003, "Removed from room");
+				else close();
+			});
+			for (const ws of [client, upstream]) ws.on("error", close);
 		});
 	});
 	await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });

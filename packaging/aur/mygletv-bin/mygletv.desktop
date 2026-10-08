@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=MygleTV
+Comment=Share your screen and application audio with friends
+Exec=mygletv %U
+Terminal=false
+Type=Application
+Icon=mygletv
+StartupWMClass=MygleTV
+Categories=Network;

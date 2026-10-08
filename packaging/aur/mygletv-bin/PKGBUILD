@@ -1,0 +1,39 @@
+# Maintainer: MygleTV contributors
+pkgname=mygletv-bin
+pkgver=0.1.1
+pkgrel=1
+pkgdesc='Private screen sharing rooms with per-application audio'
+arch=('x86_64')
+url='https://github.com/amiltoromagno/MygleTV'
+# The upstream repository does not currently declare an application license.
+license=('unknown')
+depends=('electron44' 'libpulse')
+optdepends=('pipewire-pulse: audio capture with PipeWire'
+            'pulseaudio: audio capture with PulseAudio'
+            'xdg-desktop-portal: screen capture on Wayland')
+provides=('mygletv')
+conflicts=('mygletv')
+options=('!strip')
+source=("MygleTV-${pkgver}-amd64.deb::${url}/releases/download/v${pkgver}/MygleTV-${pkgver}-amd64.deb"
+        'mygletv'
+        'mygletv.desktop')
+noextract=("MygleTV-${pkgver}-amd64.deb")
+sha256sums=('f7c16cc5d240d069d0b2957b718cbf01b02a3870a1e2f5b6426f87ef2767856b'
+            '4ee468fe5d0afa917dffcd148ed3d410294f12375470ef3510d5e7b05250d116'
+            '54993675c41195276f18ff5829e754672fb64c69c4d1b5c6a535d53b0db7137f')
+
+prepare() {
+  bsdtar -xf "${srcdir}/MygleTV-${pkgver}-amd64.deb" -C "${srcdir}"
+  bsdtar -xf "${srcdir}/data.tar.xz" -C "${srcdir}"
+}
+
+package() {
+  # Use Arch's Electron runtime; retain the released app and server layout.
+  install -d "${pkgdir}/usr/lib/mygletv"
+  cp -a "${srcdir}/opt/MygleTV/resources" "${pkgdir}/usr/lib/mygletv/"
+  rm -f "${pkgdir}/usr/lib/mygletv/resources/apparmor-profile"
+  install -Dm755 "${srcdir}/mygletv" "${pkgdir}/usr/bin/mygletv"
+  install -Dm644 "${srcdir}/mygletv.desktop" "${pkgdir}/usr/share/applications/mygletv.desktop"
+  install -Dm644 "${srcdir}/usr/share/icons/hicolor/512x512/apps/mygletv.png" \
+    "${pkgdir}/usr/share/icons/hicolor/512x512/apps/mygletv.png"
+}

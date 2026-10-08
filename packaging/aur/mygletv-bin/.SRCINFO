@@ -1,0 +1,24 @@
+pkgbase = mygletv-bin
+	pkgdesc = Private screen sharing rooms with per-application audio
+	pkgver = 0.1.1
+	pkgrel = 1
+	url = https://github.com/amiltoromagno/MygleTV
+	arch = x86_64
+	license = unknown
+	depends = electron44
+	depends = libpulse
+	optdepends = pipewire-pulse: audio capture with PipeWire
+	optdepends = pulseaudio: audio capture with PulseAudio
+	optdepends = xdg-desktop-portal: screen capture on Wayland
+	provides = mygletv
+	conflicts = mygletv
+	options = !strip
+	noextract = MygleTV-0.1.1-amd64.deb
+	source = MygleTV-0.1.1-amd64.deb::https://github.com/amiltoromagno/MygleTV/releases/download/v0.1.1/MygleTV-0.1.1-amd64.deb
+	source = mygletv
+	source = mygletv.desktop
+	sha256sums = f7c16cc5d240d069d0b2957b718cbf01b02a3870a1e2f5b6426f87ef2767856b
+	sha256sums = 4ee468fe5d0afa917dffcd148ed3d410294f12375470ef3510d5e7b05250d116
+	sha256sums = 54993675c41195276f18ff5829e754672fb64c69c4d1b5c6a535d53b0db7137f
+
+pkgname = mygletv-bin

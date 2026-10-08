@@ -71,6 +71,10 @@ Comment=Share your screen and one application's audio
 Exec=$ELECTRON $ENTRY
 Path=$APP_DIR
 Icon=mygletv
+# Electron derives the window class from app.setName("MygleTV") in main.js. The
+# two have to agree, or the dock shows a generic placeholder beside the window
+# instead of this icon.
+StartupWMClass=MygleTV
 Terminal=false
 Categories=Network;RemoteAccess;
 Keywords=screen;share;stream;webrtc;

@@ -1,6 +1,7 @@
 import { createShell } from "./shell.js";
 import { createQualityStore } from "./windows-settings.js";
 import { resolveWindowAudio } from "./audio/windows.js";
+import { DEFAULT_APP_URL } from "./app-url.js";
 
 /** Windows-only wiring; the Linux shell and preload are unchanged. */
 export function createWindowsShell(options) {
@@ -44,7 +45,13 @@ export function createWindowsShell(options) {
 			qualityStore.write(value);
 		});
 		ipcMain.handle("app:invite", (event) => trusted(event) ? options.inviteUrl || url : null);
-		if (options.inviteUrl) shell.window.on("page-title-updated", (_event, title) => shell.window.setTitle(`${title}  —  ${new URL(options.inviteUrl).host}`));
+		// Name the relay only when it is not the usual one, matching the Linux
+		// shell: an unexpected address is worth flagging, the normal one is noise.
+		if (options.inviteUrl && options.inviteUrl !== DEFAULT_APP_URL) {
+			shell.window.on("page-title-updated", (_event, title) =>
+				shell.window.setTitle(`${title}  —  ${new URL(options.inviteUrl).host}`),
+			);
+		}
 		// Replace only this Windows instance's handlers, keeping the existing
 		// response contract while validating senders and serializing lifecycle.
 		for (const channel of ["audio:list", "audio:probe", "audio:start", "audio:stop", "audio:state"]) ipcMain.removeHandler(channel);

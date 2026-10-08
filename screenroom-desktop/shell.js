@@ -69,6 +69,8 @@ export function createShell({
 	router,
 	url,
 	preloadPath,
+	iconPath = null,
+	defaultUrl = null,
 	startupError = null,
 	log = () => {},
 }) {
@@ -82,6 +84,12 @@ export function createShell({
 	} catch {
 		/* leave the raw string if it is not a URL */
 	}
+
+	/**
+	 * True when this window is on the relay a normal launch uses, which is the
+	 * only case where the address is uninteresting and can stay out of the title.
+	 */
+	const relayIsDefault = defaultUrl !== null && url === defaultUrl;
 
 	// -----------------------------------------------------------------------
 	// Audio IPC. Every handler answers with { ok }, never a thrown rejection,
@@ -207,6 +215,9 @@ export function createShell({
 			backgroundColor: "#0d1017",
 			autoHideMenuBar: true,
 			title: "MygleTV",
+			// Also drives the taskbar/dock icon, which otherwise falls back to a
+			// generic placeholder because the window class matches no entry.
+			...(iconPath ? { icon: iconPath } : {}),
 			webPreferences: {
 				preload: preloadPath,
 				contextIsolation: true,
@@ -218,13 +229,15 @@ export function createShell({
 			mainWindow = null;
 		});
 
-		// Show which relay this window is on. Two MygleTV servers can both
-		// hold a room called "main" -- one local, one remote -- and identical
-		// room names on different relays look exactly like a broken app. Without
-		// this in the title there is nothing on screen to tell them apart.
+		// Name the relay only when it is not the usual one.
+		//
+		// Two servers can both hold a room called "main" -- one local, one remote
+		// -- and identical room names on different relays look exactly like a
+		// broken app, so the address is worth showing then. On the normal path it
+		// is just noise in the title bar.
 		mainWindow.on("page-title-updated", (event, title) => {
 			event.preventDefault();
-			mainWindow.setTitle(`${title}  —  ${relayHost}`);
+			mainWindow.setTitle(relayIsDefault ? title : `${title}  —  ${relayHost}`);
 		});
 
 		// Without this, an unreachable origin leaves a blank window and no clue.

@@ -24,7 +24,7 @@ import { createShell } from "./shell.js";
 import { createWindowsCaptureSession } from "./audio/windows.js";
 import { createWindowsShell } from "./windows-shell.js";
 import { startWindowsRelayProxy } from "./windows-relay-proxy.js";
-import { resolveAppUrl } from "./app-url.js";
+import { resolveAppUrl, DEFAULT_APP_URL } from "./app-url.js";
 import { configureWindowsData } from "./windows-settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,7 +39,18 @@ const port = Number(process.env.SCREENROOM_PORT || 8080);
 
 const audioLog = (message) => console.log("[audio]", message);
 
-if (windows) configureWindowsData(app);
+if (windows) {
+	configureWindowsData(app);
+} else {
+	// The application name is what Electron reports as the window class, which is
+	// how a desktop matches a window to its launcher entry and icon. Without it
+	// the dock shows a generic placeholder instead.
+	//
+	// The profile directory is pinned to the old name first, so the rename does
+	// not discard the cached display name and quality profile.
+	app.setPath("userData", path.join(app.getPath("appData"), "screenroom-desktop"));
+	app.setName("MygleTV");
+}
 const router = windows ? createWindowsCaptureSession() : new LinuxAudioRouter({ log: audioLog });
 // Last line of defence: a hard exit must not leave audio routed to a sink that
 // is about to vanish.
@@ -126,6 +137,8 @@ async function boot() {
 		router,
 		url,
 		preloadPath: path.join(__dirname, windows ? "windows-preload.cjs" : "preload.cjs"),
+		iconPath: path.join(__dirname, "packaging", "mygletv-512.png"),
+		defaultUrl: DEFAULT_APP_URL,
 		startupError,
 		...(windows ? { inviteUrl: explicitUrl || url } : {}),
 		log: (message) => console.log(message),

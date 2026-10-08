@@ -132,6 +132,8 @@ function build(overrides = {}) {
 		...fakes,
 		url: overrides.url || URL,
 		preloadPath: PRELOAD,
+		iconPath: overrides.iconPath || null,
+		defaultUrl: overrides.defaultUrl || null,
 		startupError: overrides.startupError || null,
 		log: (message) => fakes.state.logs.push(message),
 	});
@@ -172,20 +174,34 @@ test("the window is created locked down and loads the configured origin", async 
 	assert.equal(win.loadedUrl, URL);
 });
 
-test("the window title names the relay, so two servers are distinguishable", async () => {
-	// Two MygleTV servers can both hold a room called "main". Identical room
-	// names on different relays look exactly like a broken app, so the title has
-	// to say which one this window is on.
-	const { state, shell } = build();
-	await shell.start();
-	const win = state.windows[0];
+test("the window title names the relay only when it is not the usual one", async () => {
+	// Two MygleTV servers can both hold a room called "main". Identical room names
+	// on different relays look exactly like a broken app, so an unexpected address
+	// is worth showing. On the normal path it is noise, and the title should just
+	// be the app's own.
+	const page = { preventDefault() {} };
 
-	// Electron reports the page's own title (which carries the room).
-	win.handlers.get("page-title-updated")({ preventDefault() {} }, "#main — MygleTV");
+	const normal = build({ defaultUrl: "http://127.0.0.1:8080/" });
+	await normal.shell.start();
+	normal.state.windows[0].handlers.get("page-title-updated")(page, "#main — MygleTV");
+	assert.equal(
+		normal.state.windowTitles[normal.state.windowTitles.length - 1],
+		"#main — MygleTV",
+		"the usual relay stays out of the title",
+	);
 
-	const title = state.windowTitles[state.windowTitles.length - 1];
+	const elsewhere = build({ url: "https://other.example/", defaultUrl: "http://127.0.0.1:8080/" });
+	await elsewhere.shell.start();
+	elsewhere.state.windows[0].handlers.get("page-title-updated")(page, "#main — MygleTV");
+	const title = elsewhere.state.windowTitles[elsewhere.state.windowTitles.length - 1];
 	assert.match(title, /#main/, "keeps the room from the page");
-	assert.match(title, /127\.0\.0\.1:8080/, "and adds the relay host");
+	assert.match(title, /other\.example/, "and names the unexpected relay");
+});
+
+test("the window is given an icon so the dock does not show a placeholder", async () => {
+	const { state, shell } = build({ iconPath: "/tmp/mygletv-512.png" });
+	await shell.start();
+	assert.equal(state.windows[0].options.icon, "/tmp/mygletv-512.png");
 });
 
 test("the system picker is preferred for screen capture", async () => {

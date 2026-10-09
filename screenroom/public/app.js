@@ -528,6 +528,7 @@ async function refreshAudioOptions() {
 		{ value: "system", label: "All system audio" },
 	];
 
+	let listingFailed = false;
 	try {
 		for (const entry of await listNativeApps()) {
 			const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
@@ -536,7 +537,10 @@ async function refreshAudioOptions() {
 			options.push({ value: `app:${id}`, label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}` });
 		}
 	} catch {
-		// Listing fails when nothing is playing; the other options still work.
+		// Distinct from "nothing is playing", which returns an empty list without
+		// throwing. A throw means listing itself failed, and staying silent would
+		// make a broken picker look exactly like a quiet room.
+		listingFailed = true;
 	}
 
 	select.textContent = "";
@@ -545,6 +549,19 @@ async function refreshAudioOptions() {
 		element.value = option.value;
 		element.textContent = option.label;
 		select.append(element);
+	}
+
+	// The application list is drawn from what is *playing*, not what is open, so it
+	// is legitimately empty most of the time -- and that looks identical to a
+	// picker that failed. Say which one it is rather than showing two bare options.
+	if (listingFailed || !options.some((option) => option.value.startsWith("app:"))) {
+		const hint = document.createElement("option");
+		hint.disabled = true;
+		hint.value = "";
+		hint.textContent = listingFailed
+			? "Could not list applications — check the app log"
+			: "No app is playing audio yet";
+		select.append(hint);
 	}
 
 	// Keep the previous pick if it is still on offer; otherwise start silent

@@ -251,6 +251,18 @@ try {
 		"the tile has a mute button",
 	);
 
+	// The application list is built from what is *playing*, not what is open, so an
+	// empty one is the normal case -- and it used to be indistinguishable from a
+	// picker that had failed. The fake bridge here reports no applications, which
+	// is exactly that state.
+	const audioLabels = await evaluate(
+		"[...document.getElementById('audioSource').options].map((o) => o.textContent)",
+	);
+	check(
+		audioLabels.some((label) => /No app is playing audio yet/.test(label)),
+		`an empty application list explains itself (${audioLabels.join(" | ")})`,
+	);
+
 	// Amplification above 100% is plain Web Audio, so the Linux client must offer
 	// it too. It was gated to browsers and the Windows shell for a while, which
 	// left this client -- the only one excluded -- with a slider stopping at 100%.

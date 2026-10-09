@@ -8,6 +8,7 @@
  */
 import { enterInAppFullscreen, exitInAppFullscreen } from "./windows-window.js";
 import { createStreamVolume } from "./stream-volume.js";
+import { addStreamPictureInPicture } from "./stream-pip.js";
 export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	root.classList.add("tile-player");
 	const volume = document.createElement("input");
@@ -91,9 +92,10 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 		bar.append(inApp);
 	}
 	root.append(exit);
+	const pip = addStreamPictureInPicture({ root, video, toast });
 	sync();
 	return {
 		setStream: (stream) => playback?.setStream(stream),
-		dispose: () => { playback?.dispose(); video.removeEventListener("volumechange", sync); },
+		dispose: () => { pip.dispose(); playback?.dispose(); video.removeEventListener("volumechange", sync); },
 	};
 }

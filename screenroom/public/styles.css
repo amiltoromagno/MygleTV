@@ -401,6 +401,34 @@ body {
 	display: none;
 }
 
+.tile-pip {
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	display: grid;
+	place-items: center;
+	padding: 9px;
+	border: 1px solid rgba(255, 255, 255, 0.25);
+	border-radius: 8px;
+	color: #fff;
+	background: rgba(20, 24, 30, 0.55);
+	opacity: 0;
+	pointer-events: none;
+	cursor: pointer;
+	transition: opacity 150ms, background 150ms;
+}
+.tile:hover .tile-pip,
+.tile:focus-within .tile-pip {
+	opacity: 0.8;
+	pointer-events: auto;
+}
+.tile-pip:hover,
+.tile-pip:focus-visible { opacity: 1; background: rgba(20, 24, 30, 0.85); }
+.tile-pip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile-pip:disabled { visibility: hidden; }
+@media (hover: none) { .tile .tile-pip { opacity: 0.8; pointer-events: auto; } }
+
 .tile-player:fullscreen {
 	width: 100vw;
 	height: 100vh;

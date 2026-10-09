@@ -15,6 +15,7 @@
     "check:taploop": "node test/system-tap-repeat.mjs",
     "spike:windows": "node spike/windows-spike.mjs",
     "check:windows": "electron test/windows-electron-check.mjs",
+    "check:windows-pip": "electron test/windows-pip-check.mjs",
     "check:windows-package": "node test/windows-package-check.mjs",
     "pack:windows": "electron-builder --config electron-builder.windows.yml --win --x64 --dir",
     "dist:windows": "electron-builder --config electron-builder.windows.yml --win --x64",

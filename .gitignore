@@ -28,3 +28,12 @@ vdo.ninja-develop/
 
 # Electron/Chromium debug output from manual runs
 .electron-log.txt
+
+# makepkg output. Running `makepkg -si` inside packaging/aur/*/ drops the
+# downloaded source, the extracted build tree and the built package in place.
+packaging/aur/**/src/
+packaging/aur/**/pkg/
+packaging/aur/**/*.pkg.tar.*
+packaging/aur/**/*.tar.gz
+packaging/aur/**/*.tar.zst
+packaging/aur/**/*.tar.xz

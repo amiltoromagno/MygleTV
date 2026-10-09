@@ -263,6 +263,23 @@ try {
 		`an empty application list explains itself (${audioLabels.join(" | ")})`,
 	);
 
+	// Audio inputs: the escape hatch for sound no application owns, such as a
+	// capture card linked straight to the speakers.
+	const deviceOptions = await evaluate(`
+		(() => {
+			const group = [...document.getElementById('audioSource').querySelectorAll('optgroup')]
+				.find((g) => /audio devices/i.test(g.label));
+			return group ? [...group.querySelectorAll('option')].map((o) => ({ value: o.value, label: o.textContent })) : [];
+		})()
+	`);
+	check(
+		deviceOptions.length > 0,
+		`audio inputs are offered as a source (${deviceOptions.length}: ${deviceOptions.slice(0, 3).map((d) => d.label).join(", ")})`,
+	);
+
+	// Sharing a device is verified last, after the checks that inspect the remote
+	// tile: starting a share re-renders the stage and adds a self preview.
+
 	// Amplification above 100% is plain Web Audio, so the Linux client must offer
 	// it too. It was gated to browsers and the Windows shell for a while, which
 	// left this client -- the only one excluded -- with a slider stopping at 100%.
@@ -322,6 +339,43 @@ try {
 	// And it is actually in force, not merely written down.
 	const applied = await evaluate("document.getElementById('qualityBitrate').value");
 	check(applied === "12", `the dialog reopens on the saved profile (bitrate ${applied})`);
+
+	// Sharing an audio device must actually open it. Last, because starting a
+	// share re-renders the stage and adds a self preview tile. getDisplayMedia is
+	// stubbed since a headless browser has no screen picker; everything else
+	// below is the real path the app takes.
+	await evaluate(`
+		navigator.mediaDevices.getDisplayMedia = async () => {
+			const canvas = document.createElement("canvas");
+			canvas.width = 320;
+			canvas.height = 180;
+			return canvas.captureStream(10);
+		};
+		true;
+	`);
+	await waitFor("!document.getElementById('shareBtn').disabled", "the share button to be ready");
+	// Clear the previous toast, so anything read afterwards belongs to this step.
+	await evaluate("document.getElementById('toast').hidden = true; true;");
+	await evaluate(`
+		(() => {
+			const select = document.getElementById('audioSource');
+			select.value = ${JSON.stringify(deviceOptions[0]?.value ?? "")};
+			select.dispatchEvent(new Event("change", { bubbles: true }));
+		})();
+		true;
+	`);
+	await evaluate("document.getElementById('shareBtn').click(); true;");
+	await waitFor(
+		"document.getElementById('shareBtn').textContent.includes('Stop')",
+		"sharing from the chosen audio device",
+	);
+	const warning = await evaluate(
+		"document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent",
+	);
+	check(
+		!/Could not capture that audio device/.test(warning),
+		`the device opened rather than falling back to silence (${JSON.stringify(warning)})`,
+	);
 
 	peer.close();
 } catch (err) {

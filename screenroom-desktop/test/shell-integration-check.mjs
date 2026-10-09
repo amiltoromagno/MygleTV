@@ -317,7 +317,34 @@ try {
 		!labels.some((l) => /microphone|screen share audio/i.test(l)),
 		"the confusing leftover options are gone",
 	);
-	check(labels.length === 4, `exactly four choices: no audio, system, and two apps (got ${labels.length})`);
+	// The picker's own entries are the app list; audio inputs are added under a
+	// separate group, so count only what is outside it rather than every option.
+	// An exact total would break on any machine, since the device list is real.
+	const appEntries = values.filter(
+		(v) => !v.startsWith("device:") && v !== "" && v !== "none" && v !== "system",
+	);
+	check(
+		appEntries.length === 2,
+		`exactly two application choices alongside no-audio and system (got ${appEntries.length})`,
+	);
+
+	const devicesGrouped = await page.evaluate(`
+		(() => {
+			const groups = [...document.getElementById('audioSource').querySelectorAll('optgroup')];
+			const devices = groups.find((g) => /audio devices/i.test(g.label));
+			const apps = groups.find((g) => /applications/i.test(g.label));
+			return {
+				hasDeviceGroup: Boolean(devices),
+				deviceCount: devices ? devices.querySelectorAll('option').length : 0,
+				appsGrouped: Boolean(apps) && apps.querySelectorAll('option').length === 2,
+			};
+		})()
+	`);
+	check(devicesGrouped.appsGrouped, "applications are grouped under their own heading");
+	check(
+		devicesGrouped.hasDeviceGroup,
+		`audio inputs get their own group (${devicesGrouped.deviceCount} device(s))`,
+	);
 	console.log(dim(`       labels: ${labels.join(" | ")}`));
 
 	// Choose an application and share.

@@ -12,9 +12,11 @@ import {
 	hasNative,
 	isWindowsNative,
 	listNativeApps,
+	NATIVE_DEVICE_LABEL,
 	startNativeCapture,
 	stopNativeCapture,
 } from "./audio-source.js";
+import { DEVICE_PREFIX, captureAudioDevice, listAudioDevices } from "./audio-devices.js";
 
 const $ = (id) => document.getElementById(id);
 setupWindowsWindow();
@@ -521,8 +523,8 @@ async function refreshAudioOptions() {
 
 	const previous = select.value || storedAudioChoice();
 
-	// Two things a person actually wants: one application, or everything.
-	// Anything else is noise.
+	// Two things a person wants first: one application, or everything. Then the
+	// audio inputs, which are the only way to share sound no application owns.
 	const options = [
 		{ value: "none", label: isWindowsNative ? "No other audio" : "No audio" },
 		{ value: "system", label: "All system audio" },
@@ -534,7 +536,11 @@ async function refreshAudioOptions() {
 			const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
 			const id = isWindowsNative ? entry.id : entry.app;
 			const detail = isWindowsNative && entry.detail ? ` — ${entry.detail}` : suffix;
-			options.push({ value: `app:${id}`, label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}` });
+			options.push({
+				group: "Applications",
+				value: `app:${id}`,
+				label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}`,
+			});
 		}
 	} catch {
 		// Distinct from "nothing is playing", which returns an empty list without
@@ -543,30 +549,59 @@ async function refreshAudioOptions() {
 		listingFailed = true;
 	}
 
-	select.textContent = "";
-	for (const option of options) {
-		const element = document.createElement("option");
-		element.value = option.value;
-		element.textContent = option.label;
-		select.append(element);
-	}
-
 	// The application list is drawn from what is *playing*, not what is open, so it
 	// is legitimately empty most of the time -- and that looks identical to a
 	// picker that failed. Say which one it is rather than showing two bare options.
 	if (listingFailed || !options.some((option) => option.value.startsWith("app:"))) {
-		const hint = document.createElement("option");
-		hint.disabled = true;
-		hint.value = "";
-		hint.textContent = listingFailed
-			? "Could not list applications — check the app log"
-			: "No app is playing audio yet";
-		select.append(hint);
+		options.push({
+			group: "Applications",
+			disabled: true,
+			value: "",
+			label: listingFailed
+				? "Could not list applications — check the app log"
+				: "No app is playing audio yet",
+		});
+	}
+
+	// Audio inputs. A capture card linked straight to the speakers produces no
+	// application stream at all, so this is the only way to share it.
+	try {
+		for (const device of await listAudioDevices({ exclude: [NATIVE_DEVICE_LABEL] })) {
+			options.push({
+				group: "Audio devices",
+				value: `${DEVICE_PREFIX}${device.id}`,
+				label: device.label,
+			});
+		}
+	} catch {
+		/* Best effort: the other options still work without a device list. */
+	}
+
+	select.textContent = "";
+	let currentGroup = null;
+	let group = null;
+	for (const option of options) {
+		if (option.group !== currentGroup) {
+			currentGroup = option.group;
+			group = null;
+			if (currentGroup) {
+				group = document.createElement("optgroup");
+				group.label = currentGroup;
+				select.append(group);
+			}
+		}
+		const element = document.createElement("option");
+		element.value = option.value;
+		element.textContent = option.label;
+		if (option.disabled) element.disabled = true;
+		(group || select).append(element);
 	}
 
 	// Keep the previous pick if it is still on offer; otherwise start silent
 	// rather than quietly sending more than the user expects.
-	select.value = options.some((option) => option.value === previous) ? previous : "none";
+	select.value = options.some((option) => !option.disabled && option.value === previous)
+		? previous
+		: "none";
 }
 
 function setupAudioPicker() {
@@ -624,8 +659,10 @@ async function startShare() {
 	const choice = hasNative ? $("audioSource")?.value || "none" : "display";
 
 	let target = null;
+	let deviceId = null;
 	if (choice === "system") target = { mode: "system" };
 	else if (choice.startsWith("app:")) target = { mode: "app", app: choice.slice("app:".length) };
+	else if (choice.startsWith(DEVICE_PREFIX)) deviceId = choice.slice(DEVICE_PREFIX.length);
 
 	// Native capture must be set up *before* getUserMedia, so the source exists
 	// by the time we go looking for it.
@@ -648,6 +685,17 @@ async function startShare() {
 					: `Could not capture ${targetName} (${err.message}). Sharing without sound.`;
 			await stopNativeCapture();
 		}
+	} else if (deviceId) {
+		// A plain audio input, captured directly: no bridge, no routing, and
+		// nothing changed on the system. Same failure rule -- losing the picture
+		// as well would be worse than sharing silently.
+		try {
+			nativeStream = await captureAudioDevice(deviceId);
+			state.extraStreams.push(nativeStream);
+		} catch (err) {
+			nativeStream = null;
+			audioWarning = `Could not capture that audio device (${err.message}). Sharing without sound.`;
+		}
 	}
 
 	// When the audio comes from somewhere else, don't also grab the display's.
@@ -665,18 +713,20 @@ async function startShare() {
 			? displayConstraints
 			: Object.assign({}, displayConstraints, { audio: false });
 
-	/** Undo the native audio setup when a share cannot proceed. */
+	/** Undo the audio setup when a share cannot proceed. */
 	async function abandonShare() {
-		if (!nativeStream) return;
-		for (const track of nativeStream.getTracks()) {
-			try {
-				track.stop();
-			} catch {
-				/* already ended */
+		if (nativeStream) {
+			for (const track of nativeStream.getTracks()) {
+				try {
+					track.stop();
+				} catch {
+					/* already ended */
+				}
 			}
 		}
-		await stopNativeCapture();
-		if (isWindowsNative) state.extraStreams = state.extraStreams.filter((extra) => extra !== nativeStream);
+		// Only the bridged path installs system plumbing to undo. A directly
+		// captured audio device needs nothing beyond its track being stopped.
+		if (target) await stopNativeCapture();
 	}
 	if (state.kicked) { await abandonShare(); return; }
 

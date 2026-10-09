@@ -57,7 +57,31 @@ Remap the **default sink's** monitor and capture that. Nothing is moved, so no
 loopback is needed and the user keeps hearing everything exactly as before —
 it is a tap, not a detour.
 
-Because both routes end in an ordinary input device, the renderer uses plain
+**This taps the default sink only.** Audio routed to a different output is not
+included. That is not hypothetical: a capture card linked straight to the
+speakers in PipeWire plays to whichever sink it was linked to, which need not be
+the default. Measured on one such setup, the default sink's monitor carried
+silence while the other carried the audio. Setting the sink that has the sound as
+the default fixes it — or use the audio-device route below.
+
+### An audio device
+
+The picker also lists **audio inputs** under their own heading, and capturing one
+is a plain `getUserMedia` on that device: no routing, no null sinks, nothing
+changed on the system.
+
+This is the route for sound that **no application owns**. A capture card wired
+directly to the output produces no application stream at all, so "only this app"
+has nothing to find and "all system audio" taps the wrong sink — yet the card is
+still an ordinary audio input, and this captures it. It works equally for a
+microphone or an audio interface.
+
+Device labels are withheld by the browser until the page has been granted audio
+access once, so the first time the list is opened it asks for the default input
+and releases it immediately. Our own capture sources are excluded, since sharing
+them back would be a feedback loop.
+
+Because every route ends in an ordinary input device, the renderer uses plain
 `getUserMedia` — **no PCM plumbing and no AudioWorklet on Linux.** That is a
 Windows-only problem.
 

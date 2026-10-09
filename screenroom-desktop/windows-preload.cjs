@@ -10,6 +10,7 @@ ipcRenderer.on("audio:pcm", (_event, message) => {
 
 contextBridge.exposeInMainWorld("screenroomNative", {
 	platform: "win32",
+	multiPip: true,
 	windowControl: (action) => ipcRenderer.invoke("window:control", action),
 	listApps: () => ipcRenderer.invoke("audio:list"),
 	probe: () => ipcRenderer.invoke("audio:probe"),

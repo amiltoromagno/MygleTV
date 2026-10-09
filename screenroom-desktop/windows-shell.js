@@ -2,13 +2,14 @@ import { createShell } from "./shell.js";
 import { createQualityStore } from "./windows-settings.js";
 import { resolveWindowAudio } from "./audio/windows.js";
 import { DEFAULT_APP_URL } from "./app-url.js";
+import { configureWindowsPip } from "./windows-pip.js";
 
 /** Windows-only wiring; the Linux shell and preload are unchanged. */
 export function createWindowsShell(options) {
 	const { ipcMain, session, desktopCapturer, captureSession, url } = options;
 	// Windows uses an HTML caption so it can disappear without resizing the window.
 	class WindowsWindow extends options.BrowserWindow {
-		constructor(settings) { super({ ...settings, frame: false, thickFrame: false, roundedCorners: false }); }
+		constructor(settings) { super({ ...settings, frame: false, thickFrame: false, roundedCorners: false, webPreferences: { ...settings.webPreferences, backgroundThrottling: false } }); }
 	}
 	const shell = createShell({ ...options, BrowserWindow: WindowsWindow });
 	let selected = null;
@@ -113,7 +114,7 @@ export function createWindowsShell(options) {
 			} catch { callback({}); }
 		}, { useSystemPicker: false });
 		const contents = shell.window.webContents;
-		contents.setWindowOpenHandler(() => ({ action: "deny" }));
+		configureWindowsPip(contents, shell.window, url);
 		contents.on("will-navigate", (event, nextUrl) => {
 			if (new URL(nextUrl).origin !== origin) event.preventDefault();
 		});

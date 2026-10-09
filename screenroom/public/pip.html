@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'">
+	<title>MygleTV Picture-in-Picture</title>
+	<link rel="stylesheet" href="./pip.css">
+</head>
+<body>
+	<video autoplay muted playsinline disablepictureinpicture></video>
+	<header><span id="name">MygleTV</span><button id="close" title="Close Picture-in-Picture" aria-label="Close Picture-in-Picture">×</button></header>
+	<footer>
+		<button id="mute" aria-label="Mute stream">🔊</button>
+		<input id="volume" type="range" min="0" max="300" step="1" aria-label="Stream volume, up to 300%">
+		<output id="level"></output>
+	</footer>
+	<script type="module" src="./pip.js"></script>
+</body>
+</html>

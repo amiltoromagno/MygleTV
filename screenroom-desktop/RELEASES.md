@@ -1,33 +1,33 @@
 Desktop downloads for Windows and Linux (x64).
 
-## What's new in 0.1.2
+## What's new in 0.1.3
 
-Windows streams now have a translucent Picture-in-Picture button when hovered or focused. Open a stream in a floating window, keep watching while MygleTV is minimized, and close it using the same button or the floating window's controls. The stream keeps its existing volume and amplification settings.
+Windows Picture-in-Picture now supports multiple streams simultaneously, each in its own movable, resizable, always-on-top window. The native browser timeline and address bar are replaced with MygleTV controls that appear on hover or keyboard focus: mute, volume up to 300%, and close. Volume stays synchronized with the stream's controls in the room, and audio is played only once.
 
 This release also includes clearer audio-picker feedback and direct audio-input selection.
 
 ## Windows
 
-Download `MygleTV-Setup-0.1.2-x64.exe` and run the installer. The installer is unsigned. Previous installers do not include Picture-in-Picture; install this version to get it.
+Download `MygleTV-Setup-0.1.3-x64.exe` and run the installer. The installer is unsigned. Version 0.1.2 has single-window native PiP; install this version for multiple PiP windows and volume controls.
 
 ## Linux
 
-For Ubuntu, Debian and compatible distributions, download `MygleTV-0.1.2-amd64.deb` and install it:
+For Ubuntu, Debian and compatible distributions, download `MygleTV-0.1.3-amd64.deb` and install it:
 
 ```sh
-sudo apt install ./MygleTV-0.1.2-amd64.deb
+sudo apt install ./MygleTV-0.1.3-amd64.deb
 ```
 
 MygleTV then appears in the application menu. Audio capture requires a running PulseAudio server or PipeWire with PulseAudio compatibility.
 
-For other distributions, download `MygleTV-0.1.2-x86_64.AppImage`:
+For other distributions, download `MygleTV-0.1.3-x86_64.AppImage`:
 
 ```sh
-chmod +x MygleTV-0.1.2-x86_64.AppImage
-./MygleTV-0.1.2-x86_64.AppImage
+chmod +x MygleTV-0.1.3-x86_64.AppImage
+./MygleTV-0.1.3-x86_64.AppImage
 ```
 
-AppImage requires FUSE support and `pactl` (usually provided by `pulseaudio-utils`). If FUSE is unavailable, use `./MygleTV-0.1.2-x86_64.AppImage --appimage-extract-and-run`.
+AppImage requires FUSE support and `pactl` (usually provided by `pulseaudio-utils`). If FUSE is unavailable, use `./MygleTV-0.1.3-x86_64.AppImage --appimage-extract-and-run`.
 
 Both apps connect to the project's Cloudflare room service by default. No separate Node.js installation or repository checkout is needed.
 

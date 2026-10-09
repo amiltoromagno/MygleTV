@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; font: 13px system-ui, sans-serif; }
+video { width: 100%; height: 100%; object-fit: contain; display: block; }
+header, footer { position: fixed; left: 0; right: 0; display: flex; align-items: center; gap: 10px; opacity: 0; transition: opacity 150ms; }
+header { top: 0; height: 38px; padding-left: 12px; background: linear-gradient(#000a, transparent); -webkit-app-region: drag; }
+header span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+footer { bottom: 0; padding: 18px 12px 10px; background: linear-gradient(transparent, #000c); }
+body:hover header, body:hover footer, body:focus-within header, body:focus-within footer { opacity: 1; }
+button { -webkit-app-region: no-drag; color: #fff; border: 0; border-radius: 6px; background: #ffffff20; cursor: pointer; padding: 6px 10px; font: inherit; }
+button:hover { background: #ffffff40; }
+#close { font-size: 24px; line-height: 1; margin-right: 6px; }
+input { flex: 1; min-width: 0; accent-color: #4ba3ff; }
+output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid #4ba3ff; outline-offset: 2px; }

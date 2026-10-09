@@ -23,6 +23,7 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 	volume.setAttribute("aria-label", canBoost ? "Stream volume, up to 300%" : "Stream volume");
 	let lastVolume = 1;
 	let playback = null;
+	let pip = null;
 	const value = document.createElement("span");
 	value.className = "tile-volume-value";
 	const sync = () => {
@@ -35,6 +36,7 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 		mute.title = isSelf ? "Your own screen is always muted here" : silent ? "Unmute this stream" : "Mute this stream";
 		mute.setAttribute("aria-label", mute.title);
 		mute.setAttribute("aria-pressed", String(silent));
+		pip?.sync();
 	};
 	if (canBoost) playback = createStreamVolume(video, sync, (err) => toast(`Could not amplify audio: ${err.message}`));
 	else video.addEventListener("volumechange", sync);
@@ -92,10 +94,14 @@ export function addStreamControls({ root, video, bar, mute, isSelf, toast }) {
 		bar.append(inApp);
 	}
 	root.append(exit);
-	const pip = addStreamPictureInPicture({ root, video, toast });
+	pip = addStreamPictureInPicture({ root, video, toast,
+		readVolume: () => ({ level: Number(volume.value), silent: mute.getAttribute("aria-pressed") === "true", disabled: isSelf }),
+		setVolume: (level) => { volume.value = String(level); volume.dispatchEvent(new Event("input")); },
+		toggleMute: () => mute.click(),
+	});
 	sync();
 	return {
-		setStream: (stream) => playback?.setStream(stream),
+		setStream: (stream) => { playback?.setStream(stream); pip.setStream(stream); },
 		dispose: () => { pip.dispose(); playback?.dispose(); video.removeEventListener("volumechange", sync); },
 	};
 }

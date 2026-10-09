@@ -1,108 +1,100 @@
-// Real Electron PiP windows with live MediaStreams; no audio/capture hardware needed.
-import assert from "node:assert/strict";
-import { app, BrowserWindow } from "electron";
-import { startAppServer } from "../app-server.js";
-
+// Real Windows companion windows, shared live media, and synchronized volume.
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { app, BrowserWindow } from 'electron';
+import { startAppServer } from '../app-server.js';
+import { configureWindowsPip } from '../windows-pip.js';
+const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-let server;
-let win;
-async function evaluate(code) { return win.webContents.executeJavaScript(code, true); }
-async function waitFor(code) {
-	for (let i = 0; i < 100; i++) {
-		if (await evaluate(code)) return;
-		await sleep(50);
-	}
-	throw new Error(`Timed out: ${code}`);
+let server, win;
+let code = 0;
+const evaluate = (expression) => win.webContents.executeJavaScript(expression, true);
+async function waitFor(expression) {
+  for (let i = 0; i < 120; i++) { if (await evaluate(expression)) return; await sleep(50); }
+  throw new Error(`Timed out: ${expression}`);
 }
 async function click(selector) {
-	const { x, y } = await evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2) }; })()`);
-	win.webContents.sendInputEvent({ type: "mouseMove", x, y });
-	win.webContents.sendInputEvent({ type: "mouseDown", button: "left", clickCount: 1, x, y });
-	win.webContents.sendInputEvent({ type: "mouseUp", button: "left", clickCount: 1, x, y });
+  const { x, y } = await evaluate(`(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return {x:Math.round(r.x+r.width/2),y:Math.round(r.y+r.height/2)}; })()`);
+  win.webContents.sendInputEvent({ type:'mouseMove', x, y });
+  win.webContents.sendInputEvent({ type:'mouseDown', button:'left', clickCount:1, x, y });
+  win.webContents.sendInputEvent({ type:'mouseUp', button:'left', clickCount:1, x, y });
 }
 async function run() {
-try {
-	assert.equal(process.platform, "win32");
-	await app.whenReady();
-	server = startAppServer({ port: 18000 + Math.floor(Math.random() * 2000) });
-	assert.ok(await server.ready());
-	win = new BrowserWindow({ width: 1000, height: 750, webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
-	await win.loadURL(server.url);
-	await evaluate(`(async () => {
-		document.body.innerHTML = '';
-		window.screenroomNative = { platform: 'win32' };
-		window.errors = [];
-		const { addStreamControls } = await import('./stream-controls.js');
-		window.players = [];
-		for (let i = 0; i < 2; i++) {
-			const root = document.createElement('figure'); root.className = 'tile'; root.id = 'player' + i;
-			root.style.cssText = 'width:400px;height:230px;display:inline-block';
-			const video = document.createElement('video'); video.autoplay = true; video.muted = true;
-			const bar = document.createElement('div'); bar.className = 'tile-bar';
-			const mute = document.createElement('button'); bar.append(mute); root.append(video, bar); document.body.append(root);
-			const player = addStreamControls({ root, video, bar, mute, isSelf: i === 0, toast: (e) => errors.push(e) });
-			const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360;
-			const ctx = canvas.getContext('2d'); ctx.fillStyle = i ? 'blue' : 'green'; ctx.fillRect(0,0,640,360);
-			video.srcObject = canvas.captureStream(30); await video.play();
-			players.push({ root, video, player, stream: video.srcObject });
-		}
-	})()`);
-	await waitFor("!document.querySelector('.tile-pip').disabled");
-	assert.equal(await evaluate("getComputedStyle(document.querySelector('.tile-pip')).opacity"), "0");
-	await click("#player0 .tile-pip");
-	await waitFor("document.pictureInPictureElement === players[0].video");
-	console.log("PASS real mouse click opens live stream in native PiP");
-	win.minimize();
-	await sleep(250);
-	assert.equal(await evaluate("document.pictureInPictureElement === players[0].video"), true);
-	win.restore();
-	console.log("PASS PiP remains active with application minimized");
-	await evaluate(`(() => {
-		const slider = players[1].root.querySelector('.tile-volume'); slider.value = '250'; slider.dispatchEvent(new Event('input'));
-	})()`);
-	await click("#player1 .tile-pip");
-	await waitFor("document.pictureInPictureElement === players[1].video");
-	assert.equal(await evaluate("players[0].root.querySelector('.tile-pip').getAttribute('aria-pressed')"), "false");
-	console.log("PASS switching stream updates previous and current controls");
-	assert.equal(await evaluate("players[1].root.querySelector('.tile-volume').value"), "250");
-	console.log("PASS opening PiP preserves viewer amplification level");
-	await click("#player1 .tile-pip");
-	await waitFor("!document.pictureInPictureElement");
-	console.log("PASS same control closes PiP");
-	await click("#player0 .tile-pip");
-	await waitFor("document.pictureInPictureElement === players[0].video");
-	await evaluate("players[0].player.dispose()");
-	await waitFor("!document.pictureInPictureElement");
-	assert.equal(await evaluate("players[0].stream.getVideoTracks()[0].readyState"), "live");
-	console.log("PASS removing stream closes PiP without stopping media tracks");
-	assert.deepEqual(await evaluate("errors"), []);
-	await evaluate(`void (players[1].video.requestPictureInPicture = () => Promise.reject(new Error('Test PiP failure')))`);
-	await click("#player1 .tile-pip");
-	await waitFor("errors.length === 1");
-	assert.match(await evaluate("errors[0]"), /Test PiP failure/);
-	assert.equal(await evaluate("players[1].root.querySelector('.tile-pip').disabled"), false);
-	await evaluate("delete players[1].video.requestPictureInPicture");
-	await click("#player1 .tile-pip");
-	await waitFor("document.pictureInPictureElement === players[1].video");
-	await evaluate("players[1].stream.getVideoTracks()[0].stop(); players[1].player.dispose()");
-	await waitFor("!document.pictureInPictureElement");
-	console.log("PASS failed PiP request shows feedback and allows retry");
-	await evaluate(`(async () => {
-		window.screenroomNative.platform = 'linux';
-		const { addStreamPictureInPicture } = await import('./stream-pip.js');
-		const root = document.createElement('div');
-		addStreamPictureInPicture({ root, video: players[1].video, toast() {} });
-		window.linuxPipCount = root.children.length;
-	})()`);
-	assert.equal(await evaluate("linuxPipCount"), 0);
-	console.log("PASS Linux interface is unchanged");
-} catch (error) {
-	console.error(error);
-	app.exitCode = 1;
-} finally {
-	win?.destroy();
-	server?.stop();
-	app.exit(app.exitCode || 0);
-}
+ try {
+  assert.equal(process.platform, 'win32');
+  await app.whenReady();
+  server = startAppServer({ port:18000 + Math.floor(Math.random()*2000) });
+  assert.ok(await server.ready());
+  win = new BrowserWindow({ width:1280, height:750, webPreferences:{ preload:path.join(rootDir,'windows-preload.cjs'), contextIsolation:true, nodeIntegration:false, backgroundThrottling:false } });
+  configureWindowsPip(win.webContents, win, server.url);
+  await win.loadURL(server.url);
+  await evaluate(`(async () => {
+    document.body.innerHTML = ''; window.errors = []; window.players = [];
+    const { addStreamControls } = await import('./stream-controls.js');
+    const audio = new AudioContext(); await audio.resume(); window.audio = audio;
+    const oscillator = audio.createOscillator(); const destination = audio.createMediaStreamDestination(); oscillator.connect(destination); oscillator.start();
+    for (let i=0; i<3; i++) {
+      const root = document.createElement('figure'); root.id = 'player'+i; root.className = 'tile'; root.style.cssText='width:350px;height:200px;display:inline-block;margin:4px';
+      const video = document.createElement('video'); video.autoplay = true;
+      const bar = document.createElement('div'); bar.className='tile-bar';
+      const name = document.createElement('span'); name.className='tile-name'; name.textContent='Viewer '+i;
+      const mute = document.createElement('button'); mute.className='tile-mute'; bar.append(name,mute); root.append(video,bar); document.body.append(root);
+      const player = addStreamControls({root,video,bar,mute,isSelf:false,toast:e=>errors.push(e)});
+      const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=360;
+      const ctx=canvas.getContext('2d'); ctx.fillStyle=['green','blue','red'][i]; ctx.fillRect(0,0,640,360);
+      const stream = canvas.captureStream(30); stream.addTrack(destination.stream.getAudioTracks()[0]);
+      video.srcObject=stream; player.setStream(stream); await video.play();
+      players.push({root,video,player,stream});
+    }
+  })()`);
+  await waitFor("[...document.querySelectorAll('.tile-pip')].every(b=>!b.disabled)");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.tile-pip')).opacity"),'0');
+  for (let i=0;i<3;i++) await click(`#player${i} .tile-pip`);
+  await waitFor("[...screenroomPipSessions.values()].every(s=>s.subscribe && document.querySelectorAll('.tile-pip[aria-pressed=true]').length===3)");
+  const children = () => BrowserWindow.getAllWindows().filter(w=>w!==win);
+  assert.equal(children().length,3);
+  for (const child of children()) {
+    for (let i=0; i<120; i++) {
+      if (await child.webContents.executeJavaScript("!!document.querySelector('video')?.videoWidth")) break;
+      await sleep(50);
+    }
+    assert.equal(await child.webContents.executeJavaScript("document.querySelector('video').videoWidth"),640);
+    assert.equal(child.isAlwaysOnTop(),true);
+    assert.equal(await child.webContents.executeJavaScript("document.querySelector('video').muted && !document.querySelector('video').controls"),true);
+  }
+  console.log('PASS three independent always-on-top windows render live streams without native playback bars or duplicate audio');
+  win.minimize(); await sleep(250);
+  assert.equal(children().every(w=>w.isVisible()),true); win.restore();
+  console.log('PASS all PiP windows remain visible when main app is minimized');
+  const child=children().find(w=>w.getTitle().startsWith('Viewer 1'));
+  assert.ok(child);
+  await child.webContents.executeJavaScript("document.getElementById('volume').value='300'; document.getElementById('volume').dispatchEvent(new Event('input')); true",true);
+  assert.equal(await evaluate("players[1].root.querySelector('.tile-volume').value"),'300');
+  assert.equal(await evaluate("players[1].video.muted"),true);
+  await child.webContents.executeJavaScript("document.getElementById('mute').click(); true",true);
+  assert.equal(await evaluate("players[1].root.querySelector('.tile-mute').getAttribute('aria-pressed')"),'true');
+  await child.webContents.executeJavaScript("document.getElementById('mute').click(); true",true);
+  assert.equal(await child.webContents.executeJavaScript("document.getElementById('level').textContent"),'300%');
+  await evaluate("players[1].root.querySelector('.tile-volume').value='45'; players[1].root.querySelector('.tile-volume').dispatchEvent(new Event('input')); true");
+  assert.equal(await child.webContents.executeJavaScript("document.getElementById('volume').value"),'45');
+  console.log('PASS PiP volume 0-300%, mute and room controls stay synchronized');
+  await child.webContents.executeJavaScript("document.getElementById('close').click(); true");
+  await waitFor("document.querySelectorAll('.tile-pip[aria-pressed=true]').length===2");
+  assert.equal(children().length,2);
+  await click('#player1 .tile-pip');
+  await waitFor("document.querySelectorAll('.tile-pip[aria-pressed=true]').length===3");
+  await evaluate("players[0].player.dispose(); true");
+  await sleep(100);
+  assert.equal(children().length,2);
+  assert.equal(await evaluate("players[0].stream.getVideoTracks()[0].readyState"),'live');
+  assert.equal(await evaluate("window.open('https://example.com') === null"),true);
+  console.log('PASS independent close/reopen and stream removal preserve other windows and media; external popups are blocked');
+  assert.deepEqual(await evaluate('errors'),[]);
+  await win.loadURL(server.url);
+  assert.equal(children().length,0);
+  console.log('PASS main navigation cleans up every companion window');
+ } catch(error) { console.error(error); code=1; }
+ finally { win?.destroy(); server?.stop(); app.exit(code); }
 }
 void run();

@@ -7,6 +7,7 @@ files:
   - app-url.js
   - shell.js
   - windows-shell.js
+  - windows-pip.js
   - windows-relay-proxy.js
   - windows-settings.js
   - app-server.js

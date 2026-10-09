@@ -87,6 +87,31 @@ try { page = (await (await fetch("http://127.0.0.1:9377/json")).json()).find((p)
 			assert.equal(await evaluate("document.getElementById('qualityDialog').open"), true);
 		}
 		console.log("PASS quality controls and Windows preference bridge are packaged");
+		for (const module of ["stream-pip.js", "pip.html", "pip.js", "pip.css"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
+		assert.equal(await evaluate("screenroomNative.multiPip"), true);
+		if (!cloudflare) {
+			await evaluate(`(async () => {
+				document.getElementById('qualityDialog').close();
+				const { addStreamControls } = await import('./stream-controls.js'); window.packagePip = [];
+				for (let i = 0; i < 3; i++) {
+					const root = document.createElement('figure'), video = document.createElement('video'), bar = document.createElement('div'), mute = document.createElement('button');
+					root.append(video, bar); bar.append(mute); document.body.append(root); video.muted = true;
+					const player = addStreamControls({root,video,bar,mute,isSelf:true,toast:console.error});
+					const canvas = document.createElement('canvas'); canvas.width = 320; canvas.height = 180;
+					canvas.getContext('2d').fillRect(0,0,320,180); video.srcObject = canvas.captureStream(30); player.setStream(video.srcObject); await video.play();
+					root.querySelector('.tile-pip').click(); packagePip.push({player,root,video});
+				} return true;
+			})()`);
+			let count = 0;
+			for (let i = 0; i < 50; i++) {
+				count = (await (await fetch("http://127.0.0.1:9377/json")).json()).filter((target) => new URL(target.url || "about:blank").pathname === "/pip.html").length;
+				if (count === 3) break;
+				await sleep(100);
+			}
+			assert.equal(count, 3, "Packaged app must open three independent PiP windows");
+			await evaluate("for (const entry of packagePip) { entry.player.dispose(); entry.video.srcObject.getTracks().forEach(t=>t.stop()); entry.root.remove(); } true");
+			console.log("PASS built executable opens three independent PiP windows with bundled volume controls");
+		}
 		assert.equal(await evaluate("typeof screenroomNative.setRelayUrl"), "undefined");
 		if (cloudflare) {
 			assert.equal(await evaluate("screenroomNative.getInviteUrl()"), WINDOWS_APP_URL);

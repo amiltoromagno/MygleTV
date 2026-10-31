@@ -275,41 +275,12 @@ try {
 	check(contexts > 0, `amplifying above 100% engages the Web Audio path (${contexts} context(s))`);
 	check(level === "250%", `and the readout follows the slider (${level})`);
 
-	// Stream quality: the remaining Windows-only feature. Linux has no native
-	// bridge method for it, so the preference has to land in localStorage.
-	await waitFor("!!document.getElementById('qualityBtn')", "the quality button");
-	check(true, "the desktop client offers stream quality");
-
-	await evaluate("document.getElementById('qualityBtn').click(); true");
+	// Quality is chosen in the share dialog now; the toolbar must not carry a
+	// second control competing with Share.
 	check(
-		await evaluate("document.getElementById('qualityDialog').open === true"),
-		"the quality dialog opens",
+		!(await evaluate("!!document.getElementById('qualityBtn')")),
+		"the toolbar carries no separate quality control",
 	);
-
-	await evaluate(`
-		document.getElementById('qualityBitrate').value = "12";
-		document.getElementById('qualityFps').value = "60";
-		document.getElementById('qualityResolution').value = "1080p";
-		document.getElementById('qualityForm').requestSubmit();
-		true;
-	`);
-	await sleep(800);
-
-	const stored = await evaluate("localStorage.getItem('mygletv.quality')");
-	let parsed = null;
-	try {
-		parsed = JSON.parse(stored);
-	} catch {
-		/* left null, reported below */
-	}
-	check(
-		parsed && parsed.bitrate === 12 && parsed.fps === 60 && parsed.resolution === "1080p",
-		`the chosen profile persists in localStorage (${stored})`,
-	);
-
-	// And it is actually in force, not merely written down.
-	const applied = await evaluate("document.getElementById('qualityBitrate').value");
-	check(applied === "12", `the dialog reopens on the saved profile (bitrate ${applied})`);
 
 	// The new flow, end to end. Last, because starting a share re-renders the stage
 	// and adds a self preview tile. getDisplayMedia is stubbed since a headless
@@ -406,11 +377,17 @@ try {
 		`audio inputs are offered in the dialog (${deviceOptions.length}: ${deviceOptions.slice(0, 3).map((d) => d.label).join(", ")})`,
 	);
 
-	// The dialog carries the quality controls too, pre-filled from the saved profile.
+	// The dialog carries the quality controls, so the preference is set here.
 	check(
-		(await evaluate("document.getElementById('setupBitrate').value")) === "12",
-		"the dialog prefills the saved quality",
+		(await evaluate("!!document.getElementById('setupBitrate') && !!document.getElementById('setupResolution')")),
+		"the dialog carries the quality controls",
 	);
+	await evaluate(`
+		document.getElementById('setupBitrate').value = "12";
+		document.getElementById('setupFps').value = "60";
+		document.getElementById('setupResolution').value = "1080p";
+		true;
+	`);
 
 	if (deviceOptions.length > 0) {
 		await evaluate(`
@@ -433,6 +410,22 @@ try {
 	check(
 		!/Could not capture that audio device/.test(warning),
 		`the chosen device opened rather than falling back to silence (${JSON.stringify(warning)})`,
+	);
+
+	const stored = await evaluate("localStorage.getItem('mygletv.quality')");
+	let parsed = null;
+	try {
+		parsed = JSON.parse(stored);
+	} catch {
+		/* left null, reported below */
+	}
+	check(
+		parsed && parsed.bitrate === 12 && parsed.fps === 60 && parsed.resolution === "1080p",
+		`the profile chosen in the dialog persists (${stored})`,
+	);
+	check(
+		(await evaluate("document.getElementById('shareBtn').textContent")).includes("Stop"),
+		"and the share is running at it",
 	);
 
 	peer.close();

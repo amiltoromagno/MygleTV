@@ -1086,7 +1086,10 @@ function enterRoom(name) {
 		controlsInitialized = true;
 		setupRoomControls();
 	}
-	$("shareBtn").disabled = state.sharePending || !$("qualityBtn");
+	// On Windows the share button waits for its quality controls to exist, so a
+	// share never begins before the saved profile has been applied. Everywhere
+	// else the profile is chosen in the share dialog, which opens first anyway.
+	$("shareBtn").disabled = state.sharePending || (isWindowsNative && !$("qualityBtn"));
 	updateShareButton();
 	renderRoster();
 }
@@ -1107,29 +1110,34 @@ function setupRoomControls() {
 
 	// Only does anything inside the desktop shell.
 	setupAudioPicker();
-	// Hold the share button until the saved profile has been applied, so a share
-	// never starts at one quality and then changes underneath the viewers.
-	$("shareBtn").disabled = true;
-	setupQualityControls({
-		getQuality: () => state.quality,
-		getTrack: () => state.localStream?.getVideoTracks()[0],
-		isBusy: () => state.sharePending,
-		toast,
-		applyQuality: async (quality) => {
-			if (state.sharePending) throw new Error("Screen sharing is busy.");
-			const track = state.localStream?.getVideoTracks()[0] ?? null;
-			state.sharePending = true;
-			$("shareBtn").disabled = true;
-			try {
-				// Same implementation the pre-flight dialog uses, so a profile means
-				// the same thing however it is chosen.
-				await applyShareQuality(quality, track);
-			} finally {
-				state.sharePending = false;
-				$("shareBtn").disabled = state.kicked;
-			}
-		},
-	}).finally(() => { $("shareBtn").disabled = state.kicked; });
+	// Quality is chosen in the share dialog now, so the toolbar does not need a
+	// second entry point competing with Share.
+	//
+	// Windows keeps the button: its picker collects audio but not quality, and
+	// this is also the only way to change the profile of a share already running.
+	if (isWindowsNative) {
+		$("shareBtn").disabled = true;
+		setupQualityControls({
+			getQuality: () => state.quality,
+			getTrack: () => state.localStream?.getVideoTracks()[0],
+			isBusy: () => state.sharePending,
+			toast,
+			applyQuality: async (quality) => {
+				if (state.sharePending) throw new Error("Screen sharing is busy.");
+				const track = state.localStream?.getVideoTracks()[0] ?? null;
+				state.sharePending = true;
+				$("shareBtn").disabled = true;
+				try {
+					// Same implementation the pre-flight dialog uses, so a profile means
+					// the same thing however it is chosen.
+					await applyShareQuality(quality, track);
+				} finally {
+					state.sharePending = false;
+					$("shareBtn").disabled = state.kicked;
+				}
+			},
+		}).finally(() => { $("shareBtn").disabled = state.kicked; });
+	}
 
 	document.addEventListener("keydown", (event) => {
 		if (event.key === "Escape" && state.focused && !document.fullscreenElement && !document.body.classList.contains("in-app-fullscreen")) {

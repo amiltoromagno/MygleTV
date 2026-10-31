@@ -251,35 +251,6 @@ try {
 		"the tile has a mute button",
 	);
 
-	// The application list is built from what is *playing*, not what is open, so an
-	// empty one is the normal case -- and it used to be indistinguishable from a
-	// picker that had failed. The fake bridge here reports no applications, which
-	// is exactly that state.
-	const audioLabels = await evaluate(
-		"[...document.getElementById('audioSource').options].map((o) => o.textContent)",
-	);
-	check(
-		audioLabels.some((label) => /No app is playing audio yet/.test(label)),
-		`an empty application list explains itself (${audioLabels.join(" | ")})`,
-	);
-
-	// Audio inputs: the escape hatch for sound no application owns, such as a
-	// capture card linked straight to the speakers.
-	const deviceOptions = await evaluate(`
-		(() => {
-			const group = [...document.getElementById('audioSource').querySelectorAll('optgroup')]
-				.find((g) => /audio devices/i.test(g.label));
-			return group ? [...group.querySelectorAll('option')].map((o) => ({ value: o.value, label: o.textContent })) : [];
-		})()
-	`);
-	check(
-		deviceOptions.length > 0,
-		`audio inputs are offered as a source (${deviceOptions.length}: ${deviceOptions.slice(0, 3).map((d) => d.label).join(", ")})`,
-	);
-
-	// Sharing a device is verified last, after the checks that inspect the remote
-	// tile: starting a share re-renders the stage and adds a self preview.
-
 	// Amplification above 100% is plain Web Audio, so the Linux client must offer
 	// it too. It was gated to browsers and the Windows shell for a while, which
 	// left this client -- the only one excluded -- with a slider stopping at 100%.
@@ -340,41 +311,128 @@ try {
 	const applied = await evaluate("document.getElementById('qualityBitrate').value");
 	check(applied === "12", `the dialog reopens on the saved profile (bitrate ${applied})`);
 
-	// Sharing an audio device must actually open it. Last, because starting a
-	// share re-renders the stage and adds a self preview tile. getDisplayMedia is
-	// stubbed since a headless browser has no screen picker; everything else
-	// below is the real path the app takes.
+	// The new flow, end to end. Last, because starting a share re-renders the stage
+	// and adds a self preview tile. getDisplayMedia is stubbed since a headless
+	// browser has no screen picker; everything after that is the real path.
 	await evaluate(`
 		navigator.mediaDevices.getDisplayMedia = async () => {
 			const canvas = document.createElement("canvas");
 			canvas.width = 320;
 			canvas.height = 180;
-			return canvas.captureStream(10);
+			const ctx = canvas.getContext("2d");
+			// Keep painting: a canvas that never draws can hand back a track that
+			// ends immediately, which the app (correctly) treats as a failed capture.
+			let frame = 0;
+			const timer = setInterval(() => {
+				frame++;
+				ctx.fillStyle = "#123";
+				ctx.fillRect(0, 0, 320, 180);
+				ctx.fillStyle = "#4da3ff";
+				ctx.fillText("frame " + frame, 20, 90);
+			}, 80);
+			const stream = canvas.captureStream(10);
+			stream.getVideoTracks()[0].addEventListener("ended", () => clearInterval(timer));
+			return stream;
 		};
 		true;
 	`);
 	await waitFor("!document.getElementById('shareBtn').disabled", "the share button to be ready");
-	// Clear the previous toast, so anything read afterwards belongs to this step.
 	await evaluate("document.getElementById('toast').hidden = true; true;");
+
+	// Cancelling must not start anything and must not leave a capture running.
+	await evaluate("document.getElementById('shareBtn').click(); true;");
+	await waitFor("!!document.getElementById('shareSetupDialog')", "the setup dialog");
+	check(true, "Share opens a setup dialog before going live");
+	check(
+		(await evaluate("!!document.querySelector('#shareSetupDialog video')?.srcObject")) === true,
+		"the dialog previews the chosen screen",
+	);
+	check(
+		(await evaluate("document.getElementById('shareBtn').textContent")).includes("Share screen"),
+		"and nothing is live while it is open",
+	);
+	await evaluate("document.getElementById('shareSetupCancel').click(); true;");
+	await sleep(400);
+	check(
+		!(await evaluate("!!document.getElementById('shareSetupDialog')")),
+		"Cancel closes the dialog",
+	);
+	check(
+		(await evaluate("document.getElementById('shareBtn').textContent")).includes("Share screen"),
+		"and cancelling starts no share",
+	);
+
+	// Reopen and check the picker, which is only populated now that it is needed.
 	await evaluate(`
-		(() => {
-			const select = document.getElementById('audioSource');
-			select.value = ${JSON.stringify(deviceOptions[0]?.value ?? "")};
-			select.dispatchEvent(new Event("change", { bubbles: true }));
-		})();
+		window.__errors = [];
+		window.addEventListener("error", (event) => window.__errors.push(String(event.message)));
+		window.addEventListener("unhandledrejection", (event) =>
+			window.__errors.push(String((event.reason && event.reason.message) || event.reason)));
 		true;
 	`);
 	await evaluate("document.getElementById('shareBtn').click(); true;");
+	try {
+		await waitFor("!!document.getElementById('shareSetupDialog')", "the setup dialog again", 8000);
+	} catch (err) {
+		const diag = await evaluate(`JSON.stringify({
+			errors: window.__errors,
+			disabled: document.getElementById('shareBtn').disabled,
+			toast: document.getElementById('toast').hidden ? null : document.getElementById('toast').textContent,
+			displayMedia: String(navigator.mediaDevices.getDisplayMedia).slice(0, 40),
+		})`);
+		throw new Error(`${err.message} -- ${diag}`);
+	}
+	await waitFor(
+		"[...document.querySelectorAll('#shareSetupDialog select option')].length > 0",
+		"the audio choices",
+	);
+	const audioLabels = await evaluate(
+		"[...document.getElementById('audioSource').options].map((o) => o.textContent)",
+	);
+	check(
+		audioLabels.some((label) => /No app is playing audio yet/.test(label)),
+		`an empty application list explains itself inside the dialog (${audioLabels.join(" | ")})`,
+	);
+
+	const deviceOptions = await evaluate(`
+		(() => {
+			const group = [...document.getElementById('audioSource').querySelectorAll('optgroup')]
+				.find((g) => /audio devices/i.test(g.label));
+			return group ? [...group.querySelectorAll('option')].map((o) => ({ value: o.value, label: o.textContent })) : [];
+		})()
+	`);
+	check(
+		deviceOptions.length > 0,
+		`audio inputs are offered in the dialog (${deviceOptions.length}: ${deviceOptions.slice(0, 3).map((d) => d.label).join(", ")})`,
+	);
+
+	// The dialog carries the quality controls too, pre-filled from the saved profile.
+	check(
+		(await evaluate("document.getElementById('setupBitrate').value")) === "12",
+		"the dialog prefills the saved quality",
+	);
+
+	if (deviceOptions.length > 0) {
+		await evaluate(`
+			(() => {
+				const select = document.getElementById('audioSource');
+				select.value = ${JSON.stringify(deviceOptions[0].value)};
+				select.dispatchEvent(new Event("change", { bubbles: true }));
+			})();
+			true;
+		`);
+	}
+	await evaluate("document.getElementById('shareSetupConfirm').click(); true;");
 	await waitFor(
 		"document.getElementById('shareBtn').textContent.includes('Stop')",
-		"sharing from the chosen audio device",
+		"sharing after confirming the dialog",
 	);
 	const warning = await evaluate(
 		"document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent",
 	);
 	check(
 		!/Could not capture that audio device/.test(warning),
-		`the device opened rather than falling back to silence (${JSON.stringify(warning)})`,
+		`the chosen device opened rather than falling back to silence (${JSON.stringify(warning)})`,
 	);
 
 	peer.close();

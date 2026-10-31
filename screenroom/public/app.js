@@ -5,7 +5,8 @@ import { Peer } from "./peers.js";
 import { addStreamControls } from "./stream-controls.js";
 import { setupWindowsWindow } from "./windows-window.js";
 import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
-import { setupQualityControls } from "./quality-controls.js";
+import { loadQuality, setupQualityControls, storeQuality } from "./quality-controls.js";
+import { showShareSetup } from "./share-setup.js";
 import {
 	captureNativeAudio,
 	chooseNativeScreen,
@@ -517,50 +518,57 @@ function storedAudioChoice() {
 	}
 }
 
-async function refreshAudioOptions() {
+async function refreshAudioOptions(hasDisplayAudio = false) {
 	const select = $("audioSource");
 	if (!select) return;
 
 	const previous = select.value || storedAudioChoice();
 
-	// Two things a person wants first: one application, or everything. Then the
-	// audio inputs, which are the only way to share sound no application owns.
-	const options = [
-		{ value: "none", label: isWindowsNative ? "No other audio" : "No audio" },
-		{ value: "system", label: "All system audio" },
-	];
-
-	let listingFailed = false;
-	try {
-		for (const entry of await listNativeApps()) {
-			const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
-			const id = isWindowsNative ? entry.id : entry.app;
-			const detail = isWindowsNative && entry.detail ? ` — ${entry.detail}` : suffix;
-			options.push({
-				group: "Applications",
-				value: `app:${id}`,
-				label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}`,
-			});
-		}
-	} catch {
-		// Distinct from "nothing is playing", which returns an empty list without
-		// throwing. A throw means listing itself failed, and staying silent would
-		// make a broken picker look exactly like a quiet room.
-		listingFailed = true;
+	// A desktop shell can offer whole-system audio and individual applications.
+	// A browser cannot: the only sound it has is whatever the screen capture
+	// carried, so that becomes an explicit choice rather than an implicit one.
+	const options = [];
+	if (hasNative) {
+		options.push({ value: "none", label: isWindowsNative ? "No other audio" : "No audio" });
+		options.push({ value: "system", label: "All system audio" });
+	} else {
+		options.push({ value: "none", label: "No audio" });
+		if (hasDisplayAudio) options.push({ value: "display", label: "Screen audio" });
 	}
 
-	// The application list is drawn from what is *playing*, not what is open, so it
-	// is legitimately empty most of the time -- and that looks identical to a
-	// picker that failed. Say which one it is rather than showing two bare options.
-	if (listingFailed || !options.some((option) => option.value.startsWith("app:"))) {
-		options.push({
-			group: "Applications",
-			disabled: true,
-			value: "",
-			label: listingFailed
-				? "Could not list applications — check the app log"
-				: "No app is playing audio yet",
-		});
+	let listingFailed = false;
+	if (hasNative) {
+		try {
+			for (const entry of await listNativeApps()) {
+				const suffix = entry.streams > 1 ? ` (${entry.streams} streams)` : "";
+				const id = isWindowsNative ? entry.id : entry.app;
+				const detail = isWindowsNative && entry.detail ? ` — ${entry.detail}` : suffix;
+				options.push({
+					group: "Applications",
+					value: `app:${id}`,
+					label: `${isWindowsNative ? "" : "Only "}${entry.app}${detail}`,
+				});
+			}
+		} catch {
+			// Distinct from "nothing is playing", which returns an empty list without
+			// throwing. A throw means listing itself failed, and staying silent would
+			// make a broken picker look exactly like a quiet room.
+			listingFailed = true;
+		}
+
+		// The application list is drawn from what is *playing*, not what is open, so
+		// it is legitimately empty most of the time -- and that looks identical to a
+		// picker that failed. Say which one it is rather than two bare options.
+		if (listingFailed || !options.some((option) => option.value.startsWith("app:"))) {
+			options.push({
+				group: "Applications",
+				disabled: true,
+				value: "",
+				label: listingFailed
+					? "Could not list applications — check the app log"
+					: "No app is playing audio yet",
+			});
+		}
 	}
 
 	// Audio inputs. A capture card linked straight to the speakers produces no
@@ -597,34 +605,24 @@ async function refreshAudioOptions() {
 		(group || select).append(element);
 	}
 
-	// Keep the previous pick if it is still on offer; otherwise start silent
-	// rather than quietly sending more than the user expects.
+	// Keep the previous pick if it is still on offer. Otherwise a browser falls
+	// back to the capture's own audio, which is what it used to do implicitly; a
+	// desktop shell starts silent rather than quietly sending more than expected.
+	const fallback = !hasNative && hasDisplayAudio ? "display" : "none";
 	select.value = options.some((option) => !option.disabled && option.value === previous)
 		? previous
-		: "none";
+		: fallback;
 }
 
 function setupAudioPicker() {
-	if (!hasNative) return;
 	const select = $("audioSource");
 	if (!select) return;
 
-	select.hidden = false;
-	if (isWindowsNative) {
-		// Keep the same select and listeners across picker openings, outside the bar.
-		const storage = document.createElement("div");
-		storage.hidden = true;
-		storage.id = "windowsAudioOptions";
-		document.body.append(storage);
-		storage.append(select);
-	}
+	// The picker now lives inside the share dialog, which moves it in when it
+	// opens. It is parked in a hidden container in the meantime, so it keeps the
+	// remembered value and the same listeners across openings.
 	select.value = storedAudioChoice();
 
-	// The set of playing applications changes constantly, so refresh whenever the
-	// user reaches for the picker.
-	select.addEventListener("focus", () => {
-		if (!isWindowsNative) refreshAudioOptions();
-	});
 	select.addEventListener("change", () => {
 		try {
 			localStorage.setItem(AUDIO_STORAGE_KEY, select.value);
@@ -632,8 +630,6 @@ function setupAudioPicker() {
 			/* private mode; not important */
 		}
 	});
-
-	if (!isWindowsNative) refreshAudioOptions();
 }
 
 function updateShareButton() {
@@ -642,42 +638,32 @@ function updateShareButton() {
 	button.classList.toggle("is-live", state.sharing);
 }
 
-async function startShare() {
-	if (state.sharing || state.kicked) return;
-	if (isWindowsNative) {
-		try {
-			await refreshAudioOptions();
-			if (state.kicked) return;
-			if (!await chooseNativeScreen($("audioSource"))) return;
-		}
-		catch (err) { toast(err.message); return; }
-	}
-	if (state.kicked) return;
-
-	// In the desktop shell the picker decides; in a browser we keep the display
-	// stream's own audio, exactly as before.
-	const choice = hasNative ? $("audioSource")?.value || "none" : "display";
-
+/**
+ * Capture one audio source, or explain why it could not be.
+ *
+ * Returns the stream plus an `abandon()` that undoes whatever was set up. A
+ * failure here is never fatal to the share: losing the picture as well would be a
+ * worse outcome, and it would hide the real problem behind an unrelated symptom.
+ */
+async function prepareAudio(choice) {
 	let target = null;
 	let deviceId = null;
 	if (choice === "system") target = { mode: "system" };
 	else if (choice.startsWith("app:")) target = { mode: "app", app: choice.slice("app:".length) };
 	else if (choice.startsWith(DEVICE_PREFIX)) deviceId = choice.slice(DEVICE_PREFIX.length);
 
-	// Native capture must be set up *before* getUserMedia, so the source exists
-	// by the time we go looking for it.
 	let nativeStream = null;
 	let audioWarning = null;
-	const targetName = isWindowsNative ? $("audioSource")?.selectedOptions[0]?.textContent.replace(/^Only /, "") || "the selected application" : target?.app;
+	const targetName = isWindowsNative
+		? $("audioSource")?.selectedOptions[0]?.textContent.replace(/^Only /, "") || "the selected application"
+		: target?.app;
+
 	if (target) {
 		try {
 			const started = await startNativeCapture(target);
 			nativeStream = await captureNativeAudio(started.deviceLabel, started);
 			state.extraStreams.push(nativeStream);
 		} catch (err) {
-			// A failed audio source must never stop the screen from being shared.
-			// Losing the picture as well is a far worse outcome than sharing
-			// silently, and it hides the real problem behind an unrelated symptom.
 			nativeStream = null;
 			audioWarning =
 				target.mode === "system"
@@ -687,8 +673,7 @@ async function startShare() {
 		}
 	} else if (deviceId) {
 		// A plain audio input, captured directly: no bridge, no routing, and
-		// nothing changed on the system. Same failure rule -- losing the picture
-		// as well would be worse than sharing silently.
+		// nothing changed on the system.
 		try {
 			nativeStream = await captureAudioDevice(deviceId);
 			state.extraStreams.push(nativeStream);
@@ -698,23 +683,8 @@ async function startShare() {
 		}
 	}
 
-	// When the audio comes from somewhere else, don't also grab the display's.
-	// Every client honours the same quality profile. The defaults match what this
-	// used to hardcode (4 Mbps, 30 FPS, native resolution), so nothing changes for
-	// anyone who never opens the dialog.
-	const displayConstraints = {
-		video: videoConstraints(state.quality),
-		// A desktop shell captures audio separately, so also grabbing the
-		// display's would duplicate it. A browser has no other way to get audio.
-		audio: !hasNative,
-	};
-	const constraints =
-		choice === "display"
-			? displayConstraints
-			: Object.assign({}, displayConstraints, { audio: false });
-
-	/** Undo the audio setup when a share cannot proceed. */
-	async function abandonShare() {
+	/** Only the bridged path installs system plumbing; a device needs no undo. */
+	const abandon = async () => {
 		if (nativeStream) {
 			for (const track of nativeStream.getTracks()) {
 				try {
@@ -724,65 +694,92 @@ async function startShare() {
 				}
 			}
 		}
-		// Only the bridged path installs system plumbing to undo. A directly
-		// captured audio device needs nothing beyond its track being stopped.
 		if (target) await stopNativeCapture();
-	}
-	if (state.kicked) { await abandonShare(); return; }
+	};
 
-	let stream;
-	try {
-		stream = await navigator.mediaDevices.getDisplayMedia(constraints);
-	} catch (err) {
-		await abandonShare();
-		if (err && err.name === "NotAllowedError") {
-			// In a browser this is just the picker being closed, which deserves
-			// silence. The desktop shell has no browser picker to close, so it
-			// almost always means the screen picker never opened -- and saying
-			// nothing there leaves the user with no idea what happened.
-			if (hasNative) toast("The screen picker did not open. Try again, or restart the app.");
-			return;
+	return { nativeStream, audioWarning, abandon };
+}
+
+function stopTracks(stream) {
+	for (const track of stream?.getTracks() ?? []) {
+		try {
+			track.stop();
+		} catch {
+			/* already ended */
 		}
-		toast("Could not start sharing: " + (err?.message || err));
-		return;
 	}
-	if (state.kicked) {
-		for (const track of stream.getTracks()) track.stop();
-		await abandonShare();
-		return;
-	}
+}
 
+/** A refused capture means different things in a shell and in a browser. */
+function reportDisplayError(err) {
+	if (err?.name === "NotAllowedError") {
+		// In a browser this is the picker being closed, which deserves silence. The
+		// desktop shell has no browser picker to close, so it almost always means
+		// the system picker never opened -- and saying nothing leaves no clue.
+		if (hasNative) toast("The screen picker did not open. Try again, or restart the app.");
+		return;
+	}
+	toast("Could not start sharing: " + (err?.message || err));
+}
+
+/**
+ * Apply a profile to the live capture, to every peer, and remember it.
+ *
+ * Shared by the pre-flight dialog and the mid-share Quality button, so there is
+ * one implementation of "change the quality" rather than two that drift.
+ */
+async function applyShareQuality(quality, track = state.localStream?.getVideoTracks()[0] ?? null) {
+	const previous = state.quality;
+	const target = track ?? null;
+	try {
+		if (target) await target.applyConstraints(videoConstraints(quality));
+		state.quality = quality;
+		await Promise.all([...state.peers.values()].map((peer) => peer.setQuality(quality)));
+		if (target) target.contentHint = quality.fps > 30 ? "motion" : "detail";
+		await storeQuality(quality);
+	} catch (err) {
+		// Put the old profile back rather than leaving the capture and the encoder
+		// ceilings disagreeing about what was requested.
+		state.quality = previous;
+		await Promise.allSettled([
+			...(target ? [target.applyConstraints(videoConstraints(previous))] : []),
+			...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
+		]);
+		throw err;
+	}
+}
+
+/** Attach a captured stream to every peer and go live. */
+async function finishShare(stream, prepared, choice, quality = null) {
 	const videoTrack = stream.getVideoTracks()[0] || null;
 
 	// A capture that is already finished -- the portal session ending at once, for
 	// instance -- is otherwise indistinguishable from a working share until the
 	// user notices nothing is moving.
 	if (!videoTrack || videoTrack.readyState === "ended") {
-		for (const track of stream.getTracks()) {
-			try {
-				track.stop();
-			} catch {
-				/* already ended */
-			}
-		}
-		await abandonShare();
+		stopTracks(stream);
+		await prepared.abandon();
 		toast("Screen capture ended immediately. Try again, or restart the app.");
 		return;
 	}
-	let audioTrack = stream.getAudioTracks()[0] || null;
 
-	if (nativeStream) {
-		audioTrack = nativeStream.getAudioTracks()[0] || null;
-	} else if (choice === "none") {
-		audioTrack = null;
+	let audioTrack = stream.getAudioTracks()[0] || null;
+	if (prepared.nativeStream) audioTrack = prepared.nativeStream.getAudioTracks()[0] || null;
+	else if (choice === "none") audioTrack = null;
+
+	if (quality) {
+		await applyShareQuality(quality, videoTrack).catch((err) => {
+			toast(`Sharing at the previous quality: ${err.message}`);
+		});
 	}
 
-	// Tell the encoder this is text/UI, not motion. This is the single biggest
-	// factor in whether shared text is readable.
-	if (videoTrack && "contentHint" in videoTrack) videoTrack.contentHint = state.quality.fps > 30 ? "motion" : "detail";
+	// Tell the encoder whether this is text/UI or motion; it follows the frame rate.
+	if ("contentHint" in videoTrack) {
+		videoTrack.contentHint = state.quality.fps > 30 ? "motion" : "detail";
+	}
 
 	// The browser's own "Stop sharing" bar ends the track behind our back.
-	if (videoTrack) videoTrack.addEventListener("ended", () => stopShare());
+	videoTrack.addEventListener("ended", () => stopShare());
 
 	state.localStream = stream;
 	state.localAudioTrack = audioTrack;
@@ -798,7 +795,109 @@ async function startShare() {
 
 	// Said after the share starts, so it reads as "this is running, but quietly"
 	// rather than as a failure.
-	if (audioWarning) toast(audioWarning);
+	if (prepared.audioWarning) toast(prepared.audioWarning);
+}
+
+/**
+ * Windows: untouched. Its picker is itself a dialog that collects audio, and a
+ * source must be chosen before the capture is requested.
+ */
+async function startWindowsShare() {
+	try {
+		await refreshAudioOptions();
+		if (state.kicked) return;
+		if (!(await chooseNativeScreen($("audioSource")))) return;
+	} catch (err) {
+		toast(err.message);
+		return;
+	}
+	if (state.kicked) return;
+
+	const choice = $("audioSource")?.value || "none";
+	const prepared = await prepareAudio(choice);
+	if (state.kicked) {
+		await prepared.abandon();
+		return;
+	}
+
+	let stream;
+	try {
+		stream = await navigator.mediaDevices.getDisplayMedia({
+			video: videoConstraints(state.quality),
+			audio: false,
+		});
+	} catch (err) {
+		await prepared.abandon();
+		reportDisplayError(err);
+		return;
+	}
+	if (state.kicked) {
+		stopTracks(stream);
+		await prepared.abandon();
+		return;
+	}
+
+	await finishShare(stream, prepared, choice);
+}
+
+/**
+ * Linux desktop and browsers: choose the screen first, then decide the rest with
+ * it in view. Nothing is sent until the dialog is confirmed, and cancelling
+ * releases the capture rather than leaving a hidden screen recording running.
+ */
+async function startPreflightShare() {
+	let stream;
+	try {
+		stream = await navigator.mediaDevices.getDisplayMedia({
+			video: videoConstraints(state.quality),
+			// A browser has no other route to the screen's own audio, so ask for it
+			// and offer it as a choice. A desktop shell captures audio separately
+			// and would only end up with a duplicate.
+			audio: !hasNative,
+		});
+	} catch (err) {
+		reportDisplayError(err);
+		return;
+	}
+	if (state.kicked) {
+		stopTracks(stream);
+		return;
+	}
+
+	// Checked before the dialog, so the preview is not of something already over.
+	const videoTrack = stream.getVideoTracks()[0];
+	if (!videoTrack || videoTrack.readyState === "ended") {
+		stopTracks(stream);
+		toast("Screen capture ended immediately. Try again, or restart the app.");
+		return;
+	}
+
+	const setup = await showShareSetup({
+		stream,
+		quality: await loadQuality(),
+		audioSelect: $("audioSource"),
+		refreshAudio: (hasDisplayAudio) => refreshAudioOptions(hasDisplayAudio),
+	});
+	if (!setup) {
+		stopTracks(stream);
+		return;
+	}
+
+	const prepared = await prepareAudio(setup.audio);
+	if (state.kicked) {
+		stopTracks(stream);
+		await prepared.abandon();
+		return;
+	}
+
+	await finishShare(stream, prepared, setup.audio, setup.quality);
+}
+
+async function startShare() {
+	if (state.sharing || state.kicked) return;
+	// Windows keeps its own flow: its picker already asks for audio up front.
+	if (isWindowsNative) return startWindowsShare();
+	return startPreflightShare();
 }
 
 async function stopShare() {
@@ -1018,25 +1117,17 @@ function setupRoomControls() {
 		toast,
 		applyQuality: async (quality) => {
 			if (state.sharePending) throw new Error("Screen sharing is busy.");
-			const previous = state.quality;
-			const track = state.localStream?.getVideoTracks()[0];
+			const track = state.localStream?.getVideoTracks()[0] ?? null;
 			state.sharePending = true;
 			$("shareBtn").disabled = true;
 			try {
-				if (track) await track.applyConstraints(videoConstraints(quality));
-				state.quality = quality;
-				await Promise.all([...state.peers.values()].map((peer) => peer.setQuality(quality)));
-				if (track) track.contentHint = quality.fps > 30 ? "motion" : "detail";
-			} catch (err) {
-				// Put the old profile back rather than leaving the capture and the
-				// encoder ceilings disagreeing about what was requested.
-				state.quality = previous;
-				await Promise.allSettled([
-					...(track ? [track.applyConstraints(videoConstraints(previous))] : []),
-					...[...state.peers.values()].map((peer) => peer.setQuality(previous)),
-				]);
-				throw err;
-			} finally { state.sharePending = false; $("shareBtn").disabled = state.kicked; }
+				// Same implementation the pre-flight dialog uses, so a profile means
+				// the same thing however it is chosen.
+				await applyShareQuality(quality, track);
+			} finally {
+				state.sharePending = false;
+				$("shareBtn").disabled = state.kicked;
+			}
 		},
 	}).finally(() => { $("shareBtn").disabled = state.kicked; });
 

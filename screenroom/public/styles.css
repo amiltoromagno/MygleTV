@@ -712,3 +712,55 @@ body.in-app-fullscreen .stage .tile.in-app-player {
 		margin-right: auto;
 	}
 }
+
+/* ---------------------------------------------------------------------------
+   Share setup dialog
+
+   Shown between picking a screen and going live: the capture previews beside
+   the settings, so what is about to be shared is visible while the quality and
+   audio are chosen. Stacks on narrow windows, where two columns would squeeze
+   the preview to nothing.
+   --------------------------------------------------------------------------- */
+
+#shareSetupDialog::backdrop {
+	background: rgba(0, 0, 0, 0.68);
+}
+
+.share-setup-columns {
+	display: grid;
+	grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+	gap: 20px;
+	align-items: start;
+}
+
+.share-setup-preview video {
+	display: block;
+	width: 100%;
+	max-height: 46vh;
+	background: #0d1017;
+	border: 1px solid #2b3648;
+	border-radius: 10px;
+	object-fit: contain;
+}
+
+.share-setup-options .field input,
+.share-setup-options .field .select {
+	margin-top: 6px;
+}
+
+.share-setup-note {
+	color: var(--muted, #8b96a8);
+	font-size: 12.5px;
+	line-height: 1.45;
+	margin: 6px 0 0;
+}
+
+@media (max-width: 760px) {
+	.share-setup-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.share-setup-preview video {
+		max-height: 32vh;
+	}
+}

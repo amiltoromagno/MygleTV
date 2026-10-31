@@ -285,10 +285,35 @@ try {
 	await page.waitFor("document.getElementById('app').hidden === false", "to enter the room");
 	check(true, "app loads inside the shell and joins the room");
 
-	// The picker should only appear when the native bridge is present.
-	const pickerVisible = await page.evaluate("document.getElementById('audioSource').hidden === false");
-	check(pickerVisible, "audio picker appears because screenroomNative is present");
+	/** Start sharing through the pre-flight dialog, confirming with a choice. */
+	async function startSharing(choice) {
+		await page.evaluate("document.getElementById('shareBtn').click(); true;");
+		await page.waitFor("!!document.getElementById('shareSetupDialog')", "the setup dialog");
+		if (choice !== undefined) {
+			await page.evaluate(`
+				(() => {
+					const select = document.getElementById('audioSource');
+					select.value = ${JSON.stringify(choice)};
+					select.dispatchEvent(new Event("change"));
+				})();
+				true;
+			`);
+		}
+		await page.evaluate("document.getElementById('shareSetupConfirm').click(); true;");
+	}
 
+	// The picker lives in the share dialog now, parked in its container until then.
+	check(
+		await page.evaluate(
+			"document.getElementById('audioOptionsStorage').contains(document.getElementById('audioSource'))",
+		),
+		"the audio picker waits in its container rather than the toolbar",
+	);
+
+	// Opening the dialog is what populates it.
+	await page.evaluate("document.getElementById('shareBtn').click(); true;");
+	await page.waitFor("!!document.getElementById('shareSetupDialog')", "the setup dialog");
+	check(true, "Share opens a setup dialog before anything goes live");
 	await page.waitFor(
 		`[...document.getElementById('audioSource').options].some(o => o.value === 'app:SuperGame')`,
 		"the application list to populate",
@@ -356,12 +381,12 @@ try {
 		})();
 		true;
 	`);
-	await page.evaluate("document.getElementById('shareBtn').click(); true;");
+	await page.evaluate("document.getElementById('shareSetupConfirm').click(); true;");
 	await page.waitFor(
 		"document.getElementById('shareBtn').textContent.includes('Stop')",
 		"sharing to start",
 	);
-	check(true, "sharing starts with an application audio source selected");
+	check(true, "confirming the dialog starts the share with the chosen audio");
 
 	const calls = await page.evaluate("JSON.parse(JSON.stringify(window.__calls))");
 	check(
@@ -406,15 +431,7 @@ try {
 	check(true, "share button returns to its idle state");
 
 	// Whole-system mode is the other half of the choice and must reach the shell.
-	await page.evaluate(`
-		(() => {
-			const picker = document.getElementById('audioSource');
-			picker.value = "system";
-			picker.dispatchEvent(new Event("change"));
-		})();
-		true;
-	`);
-	await page.evaluate("document.getElementById('shareBtn').click(); true;");
+	await startSharing("system");
 	await page.waitFor(
 		"document.getElementById('shareBtn').textContent.includes('Stop')",
 		"whole-system sharing to start",
@@ -439,15 +456,7 @@ try {
 
 	// Audio failing must not cost the user their screen share as well.
 	await page.evaluate("window.__failAudio = true; true;");
-	await page.evaluate(`
-		(() => {
-			const picker = document.getElementById('audioSource');
-			picker.value = "system";
-			picker.dispatchEvent(new Event("change"));
-		})();
-		true;
-	`);
-	await page.evaluate("document.getElementById('shareBtn').click(); true;");
+	await startSharing("system");
 	await page.waitFor(
 		"document.getElementById('shareBtn').textContent.includes('Stop')",
 		"sharing to start despite the audio failure",

@@ -45,11 +45,18 @@
 				</div>
 				<div class="bar-right">
 					<span class="status-text" id="statusText">Connecting…</span>
-					<select class="select" id="audioSource" hidden title="What audio to share"></select>
 					<button class="btn" id="copyBtn" type="button">Copy invite link</button>
 					<button class="btn btn-primary" id="shareBtn" type="button">Share screen</button>
 				</div>
 			</header>
+
+			<!--
+				The audio picker lives inside the share dialog, which moves it in when
+				it opens. It is parked here so it exists on load and keeps its value.
+			-->
+			<div id="audioOptionsStorage" hidden>
+				<select class="select" id="audioSource" title="What audio to share"></select>
+			</div>
 
 			<main class="main">
 				<section class="stage-wrap">

@@ -307,8 +307,28 @@ try {
 		"the empty state explains that nobody is sharing",
 	);
 
-	// Alice shares. The stub stands in for the picker.
-	await pageA.evaluate("document.getElementById('shareBtn').click(); true;");
+	/**
+	 * Share: the picker stub answers first, then the pre-flight dialog has to be
+	 * confirmed before anything is sent.
+	 */
+	async function shareVia(page, choice) {
+		await page.evaluate("document.getElementById('shareBtn').click(); true;");
+		await page.waitFor("!!document.getElementById('shareSetupDialog')", "the share setup dialog");
+		if (choice !== undefined) {
+			await page.evaluate(`
+				(() => {
+					const select = document.getElementById('audioSource');
+					select.value = ${JSON.stringify(choice)};
+					select.dispatchEvent(new Event("change"));
+				})();
+				true;
+			`);
+		}
+		await page.evaluate("document.getElementById('shareSetupConfirm').click(); true;");
+	}
+
+	// Alice shares. The stub stands in for the picker; the dialog comes next.
+	await shareVia(pageA);
 	await pageA.waitFor(
 		"document.getElementById('shareBtn').textContent.includes('Stop')",
 		"Alice's button to flip to Stop sharing",
@@ -353,7 +373,7 @@ try {
 	);
 
 	// Bob shares too: two simultaneous shares, which is the point of the app.
-	await pageB.evaluate("document.getElementById('shareBtn').click(); true;");
+	await shareVia(pageB);
 	await pageA.waitFor("document.querySelectorAll('#stage .tile').length === 2", "two tiles on Alice");
 	await pageB.waitFor("document.querySelectorAll('#stage .tile').length === 2", "two tiles on Bob");
 	check(true, "two people sharing at once shows two tiles side by side");
@@ -450,7 +470,7 @@ try {
 	check(await pageA.evaluate("document.querySelectorAll('#rosterList li').length === 2"), "kick suppresses automatic rejoining");
 	await join(pageB, "Bob");
 	for (const page of [pageA, pageB, pageC]) await page.waitFor("document.querySelectorAll('#rosterList li').length === 3", "explicit join restores membership for everyone");
-	await pageB.evaluate("document.getElementById('shareBtn').click(); true");
+	await shareVia(pageB);
 	await pageC.waitFor("document.querySelector('#stage video')?.videoWidth > 0", "rejoined user can share again");
 	await pageB.evaluate("document.getElementById('shareBtn').click(); true");
 	await pageC.waitFor("document.querySelectorAll('#stage .tile').length === 0", "rejoined user stops sharing without duplicate handlers");

@@ -15,7 +15,8 @@ import { normalizeQuality, RESOLUTIONS } from "./share-quality.js";
 
 const STORAGE_KEY = "mygletv.quality";
 
-async function loadQuality() {
+/** Read the remembered profile. Exported so the share dialog can prefill from it. */
+export async function loadQuality() {
 	if (window.screenroomNative?.getQuality) {
 		return normalizeQuality(await window.screenroomNative.getQuality());
 	}
@@ -28,7 +29,8 @@ async function loadQuality() {
 	}
 }
 
-async function storeQuality(quality) {
+/** Remember a profile. Exported for the same reason as loadQuality. */
+export async function storeQuality(quality) {
 	if (window.screenroomNative?.saveQuality) {
 		await window.screenroomNative.saveQuality(quality);
 		return;

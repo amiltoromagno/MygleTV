@@ -20,6 +20,17 @@ So we go around the browser and do the routing ourselves.
 The Electron shell is written but has never been executed — see *What is not
 verified* below. Windows is not started. macOS is out of scope.
 
+## Sharing
+
+Pressing **Share screen** opens the system picker, and then a settings dialog with
+the chosen screen previewed beside the controls: quality, and what audio to send
+with it. Nothing is transmitted until **Share** is pressed there, and **Cancel**
+releases the capture rather than leaving a hidden recording running.
+
+The toolbar no longer carries the audio dropdown; it lives in that dialog. The
+**Quality** button stays, and changes the profile of an active share, which is
+useful when a stream turns out to be heavier than expected mid-session.
+
 ## The Linux approach
 
 The picker offers exactly two kinds of choice, because that is all anyone

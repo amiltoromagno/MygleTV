@@ -1,6 +1,6 @@
 pkgbase = mygletv
 	pkgdesc = Private screen sharing rooms with per-application audio
-	pkgver = 0.1.1
+	pkgver = 0.1.3
 	pkgrel = 1
 	url = https://github.com/amiltoromagno/MygleTV
 	arch = x86_64
@@ -12,10 +12,10 @@ pkgbase = mygletv
 	optdepends = pulseaudio: audio capture with PulseAudio
 	optdepends = xdg-desktop-portal: screen capture on Wayland
 	options = !strip
-	source = mygletv-0.1.1.tar.gz::https://github.com/amiltoromagno/MygleTV/archive/refs/tags/v0.1.1.tar.gz
+	source = mygletv-0.1.3.tar.gz::https://github.com/amiltoromagno/MygleTV/archive/refs/tags/v0.1.3.tar.gz
 	source = mygletv
 	source = mygletv.desktop
-	sha256sums = 9414a6a45cde8206240dbd10d356e6903a8d0866b683f80cb4ed377bc701da43
+	sha256sums = deb2c17f7443ad8c2e5b8021a903378bab5265dd90afdf0a4d6eb7eeb598ffde
 	sha256sums = 69c2afabc1bbaffbb2d9d179e9573fc84094c6bd4361af1882fb212a3eb40791
 	sha256sums = 54993675c41195276f18ff5829e754672fb64c69c4d1b5c6a535d53b0db7137f
 

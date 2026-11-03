@@ -26,7 +26,7 @@ The Windows app connects automatically to our existing Cloudflare application:
 
 **https://screenroom.amiltoromagno.workers.dev/**
 
-Enter your name, choose audio, and share. There is no relay setup screen or
+Enter your name, choose a screen, then configure and confirm sharing. There is no relay setup screen or
 saved server configuration. Friends open the same address in a browser.
 Explicit URL overrides remain available for development:
 
@@ -48,27 +48,32 @@ using the public relay URL. **Copy invite link** copies that public URL, and the
 window title identifies the actual relay. Remote URLs must be HTTPS (HTTP is
 allowed for localhost tests).
 
-Click **Share screen**, then select a screen or window thumbnail. When a window
-can be associated with its owning process, **Share audio from [window]** appears
-as an unchecked checkbox. The user chooses whether to enable it. **Other audio
-to share**, below the thumbnails, selects another application or all system audio
-instead. Names have no “Only” prefix. Click **Share** to start; selecting a
-thumbnail alone starts no capture. Leaving both audio choices off shares silently.
-The audio list refreshes when the picker opens. Cancelling starts no capture.
+Click **Share screen**, select a screen or window thumbnail, then **Next**.
+The same **Ready to share** dialog used on Linux and the web shows a live preview
+beside resolution, FPS, bitrate and audio choices. Nothing is transmitted until
+**Share** is pressed. **Cancel** or **Esc** stops the preview and starts no audio
+capture. The source picker can also be cancelled before any capture starts.
+
+Audio starts at **No audio** for every Windows share. Select **Window audio —
+[window]** for the chosen window's process, another application, **All system
+audio**, or an audio input. Window audio is offered only when its owning process
+can be identified. Names have no “Only” prefix. The audio list refreshes for each
+setup dialog; choosing audio does not start WASAPI until **Share** is confirmed.
 
 Window audio uses the exact native window handle to identify its process rather
 than matching titles. Capture includes that process's descendants and may include
 other windows of the same application. Screens have no owning application;
-unavailable window associations leave the checkbox disabled while other audio
-choices remain usable.
+unavailable window associations leave the other audio choices usable.
 
 ## Stream quality
 
-The Windows **Quality** button beside **Copy invite link** sets the video bitrate ceiling (0.5–100 Mbps per
+The **Ready to share** dialog sets the video bitrate ceiling (0.5–100 Mbps per
 viewer), FPS (30, 60 or 120), and resolution (original, 720p, 1080p, 1440p or 4K).
-Defaults remain 4 Mbps, 30 FPS and original resolution. Changes apply to an active
-capture and its current senders; late arrivals and reconnections use the same
-profile. Audio is kept running. Preferences are saved in the Windows user data
+Defaults remain 4 Mbps, 30 FPS and original resolution. The confirmed profile
+applies to the capture and every sender; late arrivals and reconnections use the
+same profile. To change it, stop sharing and open the setup dialog again.
+The toolbar has no separate **Quality** button, matching Linux and the web.
+Preferences are saved in the Windows user data
 directory as `stream-quality.json`, independently of the local frontend port.
 
 Resolution limits preserve the source aspect ratio. The dialog reports current
@@ -77,7 +82,7 @@ from actual encoded FPS. The monitor, capture source, CPU/GPU and network can
 produce lower rates. A bitrate ceiling is not a constant bitrate, and audio plus
 network overhead are additional. Each viewer receives a separate stream.
 At 30 FPS the encoder favors resolution; higher FPS uses motion content hints
-and balanced degradation. Linux and standalone browser settings are unchanged.
+and balanced degradation.
 
 ## Watching streams
 
@@ -133,7 +138,7 @@ npm run dist:windows            # installer
 Outputs:
 
 - `dist/windows/win-unpacked/MygleTV.exe` — keep the entire directory together.
-- `dist/windows/MygleTV-Setup-0.1.0-x64.exe` — installer for sharing.
+- `dist/windows/MygleTV-Setup-0.1.4-x64.exe` — installer for sharing.
 
 The frontend, bundled Node server, WebSocket dependency and Windows native addon
 are included. Native `.node` files are unpacked from ASAR. The installer is
@@ -155,8 +160,10 @@ It measures the received signal to confirm that the selected process's tone
 arrives while the other process's tone is excluded. It also checks cancellation,
 stop, invalid selection, signaling reconnection, both tones in the system mix,
 video continuing after an injected audio failure, and cleanup on renderer reload.
-Quality checks cover saved preferences, resolution bounds for a late viewer,
-and live 120 FPS / bitrate parameter updates with audio still arriving.
+Quality checks cover preferences chosen in preflight, resolution bounds for a
+late viewer, and 120 FPS / bitrate parameters on the next share. Preview
+cancellation must stop every capture track, and reopening setup restores the
+audio picker and saved quality while requiring a fresh Windows audio choice.
 The hidden tone processes are supplied as test picker entries because they do
 not have application windows; real process discovery is checked separately.
 

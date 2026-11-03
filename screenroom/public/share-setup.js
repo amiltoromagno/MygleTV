@@ -69,6 +69,9 @@ export function showShareSetup({ stream, quality, audioSelect, refreshAudio }) {
 		const previewNote = document.createElement("p");
 		previewNote.className = "share-setup-note";
 		previewNote.textContent = "This is what everyone will see.";
+		if (window.screenroomNative && window.screenroomNative.platform === "win32") {
+			previewNote.textContent += " Application audio includes other windows from the same process.";
+		}
 		previewWrap.append(previewNote);
 		columns.append(previewWrap);
 

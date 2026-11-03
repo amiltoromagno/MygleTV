@@ -1,5 +1,18 @@
 Desktop downloads for Windows and Linux (x64).
 
+## What's new in 0.1.4
+
+Windows now follows the Linux and web sharing flow: choose a screen or window,
+then review its live preview and select resolution, FPS, bitrate and audio in
+**Ready to share**. Only **Share** starts transmission and native audio capture;
+**Cancel** or **Esc** releases the preview. The separate toolbar **Quality**
+button is removed. Quality preferences survive restarts, while every Windows
+share requires an explicit audio choice. Window audio, other applications,
+system audio and audio inputs remain available.
+
+The Windows installer is `MygleTV-Setup-0.1.4-x64.exe`. The Linux packages below
+refer to the previous 0.1.3 release.
+
 ## What's new in 0.1.3
 
 Windows Picture-in-Picture now supports multiple streams simultaneously, each in its own movable, resizable, always-on-top window. The native browser timeline and address bar are replaced with MygleTV controls that appear on hover or keyboard focus: mute, volume up to 300%, and close. Volume stays synchronized with the stream's controls in the room, and audio is played only once.

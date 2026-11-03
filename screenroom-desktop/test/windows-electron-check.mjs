@@ -13,6 +13,8 @@ import { startAppServer } from "../app-server.js";
 import { startWindowsRelayProxy } from "../windows-relay-proxy.js";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "mygletv-windows-check-")));
 const children = [];
 const files = [];
 let server;
@@ -48,7 +50,15 @@ async function tone(frequency) {
 	return child.pid;
 }
 
-async function evaluate(win, expression) { return win.webContents.executeJavaScript(expression, true); }
+async function evaluate(win, expression) {
+	let timer;
+	try {
+		return await Promise.race([
+			win.webContents.executeJavaScript(expression, true),
+			new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new Error("Renderer evaluation timed out: " + expression.slice(0, 120))), 15000); }),
+		]);
+	} finally { clearTimeout(timer); }
+}
 async function waitFor(win, expression, label, timeout = 15000) {
 	const deadline = Date.now() + timeout;
 	while (Date.now() < deadline) {
@@ -117,38 +127,38 @@ try {
 	await evaluate(host, `(() => { const original = RTCRtpSender.prototype.setParameters; window.sentQuality = []; RTCRtpSender.prototype.setParameters = function(params) { window.sentQuality.push(JSON.parse(JSON.stringify(params))); return original.call(this, params); }; })()`);
 	await evaluate(host, "document.getElementById('nameInput').value='Windows host'; document.getElementById('gateForm').requestSubmit(); true");
 	await waitFor(host, "document.getElementById('statusText').textContent === 'Connected'", "host joining");
-	await waitFor(host, "!!document.getElementById('qualityBtn')", "quality preferences loaded");
-	check(await evaluate(host, "document.getElementById('copyBtn').nextElementSibling.id === 'qualityBtn' && !document.querySelector('.bar-right #audioSource')"), "Quality sits beside Copy invite link and audio is removed from the Windows bar");
-	await evaluate(host, "document.getElementById('qualityBtn').click(); document.getElementById('qualityBitrate').value='8'; document.getElementById('qualityFps').value='60'; document.getElementById('qualityResolution').value='720p'; document.getElementById('qualityForm').requestSubmit(); true");
-	await waitFor(host, "!document.getElementById('qualityDialog').open", "quality saved");
-	assert.deepEqual(await evaluate(host, "screenroomNative.getQuality()"), { bitrate: 8, fps: 60, resolution: "720p" });
-	check(true, "Windows UI persists bitrate, FPS and resolution preferences");
+	check(await evaluate(host, "!document.getElementById('qualityBtn') && !document.querySelector('.bar-right #audioSource')"), "Windows shares the Linux/web toolbar without separate quality or audio controls");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
-	await waitFor(host, "!!document.querySelector('dialog[open]')", "display picker");
-	await waitFor(host, `!!document.querySelector('#audioSource option[value="app:${target}"]')`, "audio picker");
-	check(await evaluate(host, "!!document.querySelector('dialog[open] #audioSource') && document.getElementById('audioSource').getBoundingClientRect().height > 0"), "Share screen dialog contains the visible audio selector");
-	check(await evaluate(host, "[...document.querySelectorAll('#audioSource option')].every(o=>!o.textContent.startsWith('Only ')) && document.getElementById('confirmScreenShare').disabled"), "audio names have no Only prefix and sharing requires a selected picture");
+	await waitFor(host, "!!document.getElementById('confirmScreenShare')", "display picker");
+	check(await evaluate(host, "document.getElementById('confirmScreenShare').disabled && !document.querySelector('dialog[open] #audioSource')"), "source picker only selects picture and requires a choice");
 	await evaluate(host, "[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Cancel').click(); true");
 	await waitFor(host, "!document.getElementById('shareBtn').disabled", "cancel completion");
 	check(!capture.isActive(), "cancelling the screen picker starts no audio capture");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
-	await waitFor(host, "!!document.querySelector('dialog[open]')", "display picker again");
+	await waitFor(host, "!!document.getElementById('confirmScreenShare')", "display picker again");
 	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); true");
-	check(!capture.isActive() && await evaluate(host, "!document.getElementById('shareWindowAudio').checked && !document.getElementById('shareWindowAudio').disabled && document.querySelector('dialog[open]') !== null"), "selecting a source offers its application audio but starts neither audio nor video");
-	await evaluate(host, `document.getElementById('shareWindowAudio').click(); document.getElementById('audioSource').value='app:${other}'; document.getElementById('audioSource').dispatchEvent(new Event('change')); true`);
-	check(await evaluate(host, "!document.getElementById('shareWindowAudio').checked"), "choosing other audio replaces the selected application's audio");
-	await evaluate(host, "document.getElementById('shareWindowAudio').click(); document.getElementById('confirmScreenShare').click(); true");
+	check(!capture.isActive() && await evaluate(host, "!document.querySelector('#stage video')"), "selecting a source starts neither native audio nor sharing");
+	await evaluate(host, "document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareSetupDialog')?.open && document.querySelector('#shareSetupDialog video')?.videoWidth > 0", "live preflight preview");
+	check(!capture.isActive() && await evaluate(host, "document.getElementById('audioSource').value==='none' && !document.querySelector('#stage video')"), "preflight previews video without transmitting or capturing audio");
+	await evaluate(host, "window.cancelledPreview=document.querySelector('#shareSetupDialog video').srcObject; document.getElementById('shareSetupCancel').click(); true");
+	await waitFor(host, "!document.getElementById('shareBtn').disabled && cancelledPreview.getTracks().every(t=>t.readyState==='ended')", "preflight cancellation stops preview");
+	check(!capture.isActive(), "cancelling preflight releases capture without starting WASAPI");
+	await evaluate(host, "document.getElementById('shareBtn').click(); true");
+	await waitFor(host, "!!document.getElementById('confirmScreenShare')", "picker after preview cancellation");
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareSetupDialog')?.open", "preflight reopens");
+	check(await evaluate(host, "[...document.querySelectorAll('#audioSource option')].every(o=>!o.textContent.startsWith('Only ')) && !!document.querySelector('#shareSetupDialog #audioSource')"), "shared setup contains the restored audio picker with Windows process names");
+	await evaluate(host, `document.getElementById('setupBitrate').value='8'; document.getElementById('setupFps').value='60'; document.getElementById('setupResolution').value='720p'; document.getElementById('audioSource').value='app:${target}'; document.getElementById('shareSetupConfirm').click(); true`);
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "actual screen capture");
-	check(capture.activeApp === String(target), "UI starts WASAPI capture for the selected process");
+	assert.deepEqual(await evaluate(host, "screenroomNative.getQuality()"), { bitrate: 8, fps: 60, resolution: "720p" });
+	check(capture.activeApp === String(target), "preflight persists quality and starts WASAPI for the selected process");
 	const viewer = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
 	await viewer.loadURL(`${server.url}?room=windows-check`);
 	await evaluate(viewer, "document.getElementById('nameInput').value='Late viewer'; document.getElementById('gateForm').requestSubmit(); true");
 	await waitFor(viewer, "document.querySelector('#stage video')?.videoWidth > 0", "late viewer receives screen", 25000);
 	await waitFor(host, "sentQuality.some(p=>p.encodings?.[0]?.maxBitrate===8000000 && p.encodings[0].maxFramerate===60)", "late peer quality parameters");
 	check(await evaluate(viewer, "document.querySelector('#stage video').videoWidth<=1280 && document.querySelector('#stage video').videoHeight<=720"), "late viewer receives video bounded to 720p with 8 Mbps / 60 FPS sender limits");
-	await evaluate(host, "document.getElementById('qualityBtn').click(); document.getElementById('qualityBitrate').value='6'; document.getElementById('qualityFps').value='120'; document.getElementById('qualityResolution').value='1080p'; document.getElementById('qualityForm').requestSubmit(); true");
-	await waitFor(host, "!document.getElementById('qualityDialog').open", "live quality update");
-	check(await evaluate(host, "sentQuality.some(p=>p.encodings?.[0]?.maxBitrate===6000000 && p.encodings[0].maxFramerate===120)"), "active sender accepts 120 FPS and a new bitrate ceiling without restarting capture");
 	check(await evaluate(viewer, analyserScript) === 1, "late-joining browser receives an audio track over WebRTC");
 	await waitFor(viewer, `(${measureScript}).target > 0.01`, "remote tone", 12000);
 	const levels = await evaluate(viewer, measureScript);
@@ -173,6 +183,8 @@ try {
 		navigator.mediaDevices.getDisplayMedia=async()=>new MediaStream([...canvas.captureStream(10).getVideoTracks(),...output.stream.getAudioTracks()]);
 		document.getElementById('shareBtn').click();
 	})()`);
+	await waitFor(viewer, "document.getElementById('shareSetupDialog')?.open", "browser share setup");
+	await evaluate(viewer, "document.getElementById('shareSetupConfirm').click(); true");
 	await waitFor(host, "document.querySelectorAll('#stage .tile').length === 2", "Windows receives a second stream");
 	check(await evaluate(host, `(() => {
 		const tile=[...document.querySelectorAll('#stage .tile')].find(t=>t.querySelector('.tile-name').textContent==='Late viewer');
@@ -235,8 +247,12 @@ try {
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!!document.querySelector('dialog[open]')", "silent share picker");
 	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareSetupDialog')?.open", "silent share setup");
+	check(await evaluate(host, "document.getElementById('setupBitrate').value==='8' && document.getElementById('setupFps').value==='60' && document.getElementById('setupResolution').value==='720p' && document.getElementById('audioSource').value==='none'"), "next share restores quality while requiring explicit audio consent");
+	await evaluate(host, "document.getElementById('setupBitrate').value='6'; document.getElementById('setupFps').value='120'; document.getElementById('setupResolution').value='1080p'; document.getElementById('shareSetupConfirm').click(); true");
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "share without selected audio");
-	check(!capture.isActive(), "leaving window audio unchecked shares video without starting native audio");
+	check(await evaluate(host, "sentQuality.some(p=>p.encodings?.[0]?.maxBitrate===6000000 && p.encodings[0].maxFramerate===120)"), "new preflight applies 120 FPS and bitrate to existing peers");
+	check(!capture.isActive(), "choosing no audio shares video without starting native audio");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!document.getElementById('shareBtn').disabled", "silent share stops");
 	const invalid = await evaluate(host, "screenroomNative.startCapture({mode:'app',app:'bad'})");
@@ -258,7 +274,9 @@ try {
 	failCapture = true;
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!!document.querySelector('dialog[open]')", "failure-path picker");
-	await evaluate(host, `document.querySelector('.screen-picker-grid button').click(); document.getElementById('audioSource').value='app:${target}'; document.getElementById('audioSource').dispatchEvent(new Event('change')); document.getElementById('confirmScreenShare').click(); true`);
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareSetupDialog')?.open", "failure-path setup");
+	await evaluate(host, `document.getElementById('audioSource').value='app:${target}'; document.getElementById('shareSetupConfirm').click(); true`);
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "video survives audio failure");
 	check(!capture.isActive() && await evaluate(host, "/without sound/i.test(document.getElementById('toast').textContent)"), "Windows audio failure leaves video sharing with a clear warning");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
@@ -283,7 +301,9 @@ try {
 	await waitFor(viewer, "document.querySelectorAll('#rosterList li').length === 2", "viewer explicitly rejoins");
 	await evaluate(host, "document.getElementById('shareBtn').click(); true");
 	await waitFor(host, "!!document.getElementById('confirmScreenShare')", "moderation audio picker");
-	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('shareWindowAudio').checked=true; document.getElementById('shareWindowAudio').dispatchEvent(new Event('change')); document.getElementById('confirmScreenShare').click(); true");
+	await evaluate(host, "document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+	await waitFor(host, "document.getElementById('shareSetupDialog')?.open", "moderation share setup");
+	await evaluate(host, `document.getElementById('audioSource').value='app:${target}'; document.getElementById('shareSetupConfirm').click(); true`);
 	await waitFor(host, "document.getElementById('shareBtn').textContent === 'Stop sharing'", "moderation native capture starts");
 	check(capture.isActive(), "native audio is active before removal");
 	await waitFor(viewer, "document.querySelector('#stage video')?.videoWidth > 0", "viewer receives Windows stream before kick");
@@ -296,7 +316,7 @@ try {
 	await waitFor(host, "!document.querySelector('#gateForm button').disabled", "Windows cleanup finishes before rejoin");
 	await evaluate(host, "document.getElementById('nameInput').value='Windows host'; document.getElementById('gateForm').requestSubmit(); true");
 	await waitFor(host, "document.getElementById('statusText').textContent === 'Connected'", "Windows explicitly rejoins without reload");
-	check(await evaluate(host, "document.querySelectorAll('#qualityBtn').length === 1"), "Windows rejoin reuses controls instead of duplicating them");
+	check(await evaluate(host, "!document.getElementById('qualityBtn') && !document.getElementById('shareBtn').disabled"), "Windows rejoin keeps the shared toolbar ready");
 	code = 0;
 } catch (err) {
 	console.error(err.stack);

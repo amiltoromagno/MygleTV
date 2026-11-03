@@ -27,9 +27,11 @@ the chosen screen previewed beside the controls: quality, and what audio to send
 with it. Nothing is transmitted until **Share** is pressed there, and **Cancel**
 releases the capture rather than leaving a hidden recording running.
 
-The toolbar no longer carries the audio dropdown; it lives in that dialog. The
-**Quality** button stays, and changes the profile of an active share, which is
-useful when a stream turns out to be heavier than expected mid-session.
+The toolbar carries neither a separate audio dropdown nor a **Quality** button;
+both live in the setup dialog on Linux, Windows and the web. Stop sharing and
+open it again to change the profile. Windows first uses its thumbnail picker,
+then opens the same preview and settings dialog; application audio still uses
+its native WASAPI capture.
 
 ## The Linux approach
 

@@ -5,7 +5,7 @@ import { Peer } from "./peers.js";
 import { addStreamControls } from "./stream-controls.js";
 import { setupWindowsWindow } from "./windows-window.js";
 import { DEFAULT_QUALITY, videoConstraints } from "./share-quality.js";
-import { loadQuality, setupQualityControls, storeQuality } from "./quality-controls.js";
+import { loadQuality, storeQuality } from "./quality-controls.js";
 import { showShareSetup } from "./share-setup.js";
 import {
 	captureNativeAudio,
@@ -529,7 +529,7 @@ async function refreshAudioOptions(hasDisplayAudio = false) {
 	// carried, so that becomes an explicit choice rather than an implicit one.
 	const options = [];
 	if (hasNative) {
-		options.push({ value: "none", label: isWindowsNative ? "No other audio" : "No audio" });
+		options.push({ value: "none", label: "No audio" });
 		options.push({ value: "system", label: "All system audio" });
 	} else {
 		options.push({ value: "none", label: "No audio" });
@@ -725,8 +725,7 @@ function reportDisplayError(err) {
 /**
  * Apply a profile to the live capture, to every peer, and remember it.
  *
- * Shared by the pre-flight dialog and the mid-share Quality button, so there is
- * one implementation of "change the quality" rather than two that drift.
+ * Used by the share dialog for every platform.
  */
 async function applyShareQuality(quality, track = state.localStream?.getVideoTracks()[0] ?? null) {
 	const previous = state.quality;
@@ -799,53 +798,21 @@ async function finishShare(stream, prepared, choice, quality = null) {
 }
 
 /**
- * Windows: untouched. Its picker is itself a dialog that collects audio, and a
- * source must be chosen before the capture is requested.
- */
-async function startWindowsShare() {
-	try {
-		await refreshAudioOptions();
-		if (state.kicked) return;
-		if (!(await chooseNativeScreen($("audioSource")))) return;
-	} catch (err) {
-		toast(err.message);
-		return;
-	}
-	if (state.kicked) return;
-
-	const choice = $("audioSource")?.value || "none";
-	const prepared = await prepareAudio(choice);
-	if (state.kicked) {
-		await prepared.abandon();
-		return;
-	}
-
-	let stream;
-	try {
-		stream = await navigator.mediaDevices.getDisplayMedia({
-			video: videoConstraints(state.quality),
-			audio: false,
-		});
-	} catch (err) {
-		await prepared.abandon();
-		reportDisplayError(err);
-		return;
-	}
-	if (state.kicked) {
-		stopTracks(stream);
-		await prepared.abandon();
-		return;
-	}
-
-	await finishShare(stream, prepared, choice);
-}
-
-/**
- * Linux desktop and browsers: choose the screen first, then decide the rest with
+ * Choose the screen first, then decide the rest with
  * it in view. Nothing is sent until the dialog is confirmed, and cancelling
  * releases the capture rather than leaving a hidden screen recording running.
  */
 async function startPreflightShare() {
+	let source = null;
+	if (isWindowsNative) {
+		try {
+			source = await chooseNativeScreen();
+		} catch (err) {
+			toast(err.message);
+			return;
+		}
+		if (!source || state.kicked) return;
+	}
 	let stream;
 	try {
 		stream = await navigator.mediaDevices.getDisplayMedia({
@@ -872,16 +839,37 @@ async function startPreflightShare() {
 		return;
 	}
 
-	const setup = await showShareSetup({
-		stream,
-		quality: await loadQuality(),
-		audioSelect: $("audioSource"),
-		refreshAudio: (hasDisplayAudio) => refreshAudioOptions(hasDisplayAudio),
-	});
-	if (!setup) {
+	let setup;
+	try {
+		setup = await showShareSetup({
+			stream,
+			quality: await loadQuality(),
+			audioSelect: $("audioSource"),
+			refreshAudio: async (hasDisplayAudio) => {
+				await refreshAudioOptions(hasDisplayAudio);
+				if (source) {
+					// Window ownership can identify audio absent from the process list.
+					const select = $("audioSource");
+					if (source.audioApp) {
+						const value = "app:" + source.audioApp;
+						let option = Array.from(select.options).find((item) => item.value === value);
+						if (!option) { option = document.createElement("option"); option.value = value; select.append(option); }
+						option.textContent = "Window audio — " + source.name;
+					}
+					// Each Windows share requires an explicit audio choice.
+					select.value = "none";
+				}
+			},
+		});
+	} catch (err) {
+		stopTracks(stream);
+		throw err;
+	}
+	if (!setup || state.kicked) {
 		stopTracks(stream);
 		return;
 	}
+	$("audioSource").dispatchEvent(new Event("change"));
 
 	const prepared = await prepareAudio(setup.audio);
 	if (state.kicked) {
@@ -895,8 +883,6 @@ async function startPreflightShare() {
 
 async function startShare() {
 	if (state.sharing || state.kicked) return;
-	// Windows keeps its own flow: its picker already asks for audio up front.
-	if (isWindowsNative) return startWindowsShare();
 	return startPreflightShare();
 }
 
@@ -1086,10 +1072,7 @@ function enterRoom(name) {
 		controlsInitialized = true;
 		setupRoomControls();
 	}
-	// On Windows the share button waits for its quality controls to exist, so a
-	// share never begins before the saved profile has been applied. Everywhere
-	// else the profile is chosen in the share dialog, which opens first anyway.
-	$("shareBtn").disabled = state.sharePending || (isWindowsNative && !$("qualityBtn"));
+	$("shareBtn").disabled = state.sharePending;
 	updateShareButton();
 	renderRoster();
 }
@@ -1110,34 +1093,6 @@ function setupRoomControls() {
 
 	// Only does anything inside the desktop shell.
 	setupAudioPicker();
-	// Quality is chosen in the share dialog now, so the toolbar does not need a
-	// second entry point competing with Share.
-	//
-	// Windows keeps the button: its picker collects audio but not quality, and
-	// this is also the only way to change the profile of a share already running.
-	if (isWindowsNative) {
-		$("shareBtn").disabled = true;
-		setupQualityControls({
-			getQuality: () => state.quality,
-			getTrack: () => state.localStream?.getVideoTracks()[0],
-			isBusy: () => state.sharePending,
-			toast,
-			applyQuality: async (quality) => {
-				if (state.sharePending) throw new Error("Screen sharing is busy.");
-				const track = state.localStream?.getVideoTracks()[0] ?? null;
-				state.sharePending = true;
-				$("shareBtn").disabled = true;
-				try {
-					// Same implementation the pre-flight dialog uses, so a profile means
-					// the same thing however it is chosen.
-					await applyShareQuality(quality, track);
-				} finally {
-					state.sharePending = false;
-					$("shareBtn").disabled = state.kicked;
-				}
-			},
-		}).finally(() => { $("shareBtn").disabled = state.kicked; });
-	}
 
 	document.addEventListener("keydown", (event) => {
 		if (event.key === "Escape" && state.focused && !document.fullscreenElement && !document.body.classList.contains("in-app-fullscreen")) {

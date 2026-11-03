@@ -72,26 +72,41 @@ try { page = (await (await fetch("http://127.0.0.1:9377/json")).json()).find((p)
 		assert.equal(await evaluate("typeof screenroomNative.windowControl"), "function");
 		assert.equal(await evaluate("!!document.querySelector('.windows-caption [data-window-action=close]')"), true);
 		console.log("PASS borderless Windows caption and window control bridge are packaged");
-		for (const module of ["quality-controls.js", "share-quality.js", "peers.js"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
+		for (const module of ["quality-controls.js", "share-quality.js", "share-setup.js", "peers.js"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
 		assert.equal(await evaluate("typeof screenroomNative.getQuality"), "function");
 		assert.equal(await evaluate("typeof screenroomNative.saveQuality"), "function");
 		if (!cloudflare) {
 			await evaluate("document.getElementById('nameInput').value='Package check'; document.getElementById('gateForm').requestSubmit(); true");
 			let ready = false;
 			for (let i = 0; i < 100; i++) {
-				ready = await evaluate("!!document.getElementById('qualityBtn')");
+				ready = await evaluate("document.getElementById('statusText').textContent==='Connected' && !document.getElementById('shareBtn').disabled");
 				if (ready) break; await sleep(100);
 			}
-			assert.ok(ready, "Packaged quality UI did not initialize");
-			await evaluate("document.getElementById('qualityBtn').click(); true");
-			assert.equal(await evaluate("document.getElementById('qualityDialog').open"), true);
+			assert.ok(ready, "Packaged room did not initialize");
+			assert.equal(await evaluate("!!document.getElementById('qualityBtn')"), false);
+			await evaluate("document.getElementById('shareBtn').click(); true");
+			for (let i = 0; i < 100; i++) {
+				if (await evaluate("!!document.getElementById('confirmScreenShare')")) break;
+				await sleep(100);
+			}
+			await evaluate("document.querySelector('.screen-picker-grid button').click(); document.getElementById('confirmScreenShare').click(); true");
+			for (let i = 0; i < 100; i++) {
+				if (await evaluate("document.getElementById('shareSetupDialog')?.open")) break;
+				await sleep(100);
+			}
+			assert.equal(await evaluate("document.getElementById('shareSetupDialog').open && !!document.querySelector('#shareSetupDialog video').srcObject && !!document.querySelector('#shareSetupDialog #audioSource')"), true);
+			await evaluate("window.previewBeforeCancel=document.querySelector('#shareSetupDialog video').srcObject; document.getElementById('shareSetupCancel').click(); true");
+			for (let i = 0; i < 100; i++) {
+				if (await evaluate("!document.getElementById('shareBtn').disabled")) break;
+				await sleep(100);
+			}
+			assert.equal(await evaluate("previewBeforeCancel.getTracks().every(t=>t.readyState==='ended')"), true);
 		}
 		console.log("PASS quality controls and Windows preference bridge are packaged");
 		for (const module of ["stream-pip.js", "pip.html", "pip.js", "pip.css"]) assert.equal((await fetch(new URL(`/${module}`, page.url))).status, 200);
 		assert.equal(await evaluate("screenroomNative.multiPip"), true);
 		if (!cloudflare) {
 			await evaluate(`(async () => {
-				document.getElementById('qualityDialog').close();
 				const { addStreamControls } = await import('./stream-controls.js'); window.packagePip = [];
 				for (let i = 0; i < 3; i++) {
 					const root = document.createElement('figure'), video = document.createElement('video'), bar = document.createElement('div'), mute = document.createElement('button');

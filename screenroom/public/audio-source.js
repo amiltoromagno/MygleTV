@@ -9,10 +9,10 @@ const bridge = typeof window !== "undefined" ? window.screenroomNative : null;
 export const hasNative = Boolean(bridge);
 export const isWindowsNative = bridge?.platform === "win32";
 
-export async function chooseNativeScreen(audioSelect) {
+export async function chooseNativeScreen() {
 	if (!isWindowsNative) return true;
 	const { chooseWindowsScreen } = await import("./windows-screen-picker.js");
-	return chooseWindowsScreen(bridge, audioSelect);
+	return chooseWindowsScreen(bridge);
 }
 
 /** Must match VIRTUAL_MIC_LABEL / SYSTEM_TAP_LABEL in the desktop shell. */

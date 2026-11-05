@@ -1,0 +1,31 @@
+{
+  "name": "screenroom-macos",
+  "version": "0.1.4",
+  "private": true,
+  "description": "macOS desktop sharing client for MygleTV, with per-application audio capture via ScreenCaptureKit.",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "build:helper": "node scripts/build-helper.mjs",
+    "test": "node --test test/*.test.mjs",
+    "start": "npm run build:helper && node scripts/run-electron.mjs main.js",
+    "spike:macos": "npm run build:helper && node spike/macos-spike.mjs",
+    "check:macos": "npm run build:helper && node scripts/run-electron.mjs test/macos-electron-check.mjs",
+    "check:macos-package": "node test/macos-package-check.mjs",
+    "pack:macos": "npm run build:helper && electron-builder --config electron-builder.macos.yml --mac --dir",
+    "dist:macos": "npm run build:helper && electron-builder --config electron-builder.macos.yml --mac",
+    "install:macos": "npm run pack:macos && node scripts/install-macos-app.mjs",
+    "uninstall:macos": "node scripts/install-macos-app.mjs --uninstall"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  }
+}
+

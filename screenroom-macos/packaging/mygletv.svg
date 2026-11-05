@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="MygleTV">
+  <rect width="512" height="512" rx="112" fill="#0d1017"/>
+  <g fill="none" stroke="#66b0ff" stroke-width="28" stroke-linecap="round">
+    <rect x="80" y="104" width="352" height="232" rx="28"/>
+    <path d="M256 336v58"/>
+    <path d="M176 436h160"/>
+    <path d="M206 208a71 71 0 0 1 100 0"/>
+    <path d="M162 164a142 142 0 0 1 188 0"/>
+  </g>
+  <circle cx="256" cy="258" r="23" fill="#66b0ff"/>
+</svg>

@@ -1,0 +1,46 @@
+appId: com.mygletv.desktop
+productName: MygleTV
+directories:
+  output: dist/macos
+files:
+  - main.js
+  - app-url.js
+  - shell.js
+  - macos-shell.js
+  - macos-pip.js
+  - macos-relay-proxy.js
+  - macos-settings.js
+  - app-server.js
+  - macos-preload.cjs
+  - audio/**
+  - bin/**
+  - packaging/**
+  - package.json
+asarUnpack:
+  - 'bin/**'
+extraResources:
+  - from: ../screenroom
+    to: screenroom
+    filter:
+      - server.js
+      - package.json
+      - public/**
+  - from: ../screenroom/node_modules/ws
+    to: screenroom/node_modules/ws
+    filter:
+      - '**/*'
+npmRebuild: false
+afterSign: scripts/after-sign.cjs
+mac:
+  category: public.app-category.social-networking
+  icon: packaging/mygletv-512.png
+  identity: null
+  target:
+    - dmg
+    - zip
+  artifactName: MygleTV-${version}-${arch}.${ext}
+  extendInfo:
+    NSMicrophoneUsageDescription: MygleTV uses audio input devices when you choose to share a microphone or capture card.
+    NSScreenCaptureUsageDescription: MygleTV uses screen and application audio capture when you share a screen or window in a room.
+    NSAudioCaptureUsageDescription: MygleTV captures application or system audio when you choose to include sound with your screen share.
+
